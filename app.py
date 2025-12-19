@@ -14,7 +14,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Intentar poner fecha en español (si el sistema lo permite)
 try:
     locale.setlocale(locale.LC_TIME, "es_AR.UTF-8")
 except:
@@ -52,28 +51,41 @@ def cargar_datos_completos():
         df_p['mm'] = pd.to_numeric(df_p['Mil_metros_registrados'], errors='coerce').fillna(0)
         
         map_f = {'viento': 'Vientos fuertes', 'granizo': 'Granizo', 'tormenta': 'Tormentas eléctricas', 'sinfeno': 'Sin obs. de fenómenos'}
-        df_p['fen'] = df_p['fenomeno'].astype(str).str.strip().str.lower().replace(map_f)
-        df_p['fen'] = df_p['fen'].replace({'none': 'Sin obs. de fenómenos', 'nan': 'Sin obs. de fenómenos'})
+        df_p['Fenómeno atmosférico'] = df_p['fenomeno'].astype(str).str.strip().str.lower().replace(map_f)
+        df_p['Fenómeno atmosférico'] = df_p['Fenómeno atmosférico'].replace({'none': 'Sin obs. de fenómenos', 'nan': 'Sin obs. de fenómenos'})
 
         res = df_c.apply(extraer_coordenadas, axis=1)
         df_c['lat'], df_c['lon'] = zip(*res)
         col_n = next((c for c in df_c.columns if 'Nombre_del_Pluviometro' in c), 'cod')
         
-        df = pd.merge(df_p, df_c[['cod', 'lat', 'lon', col_n]], on='cod', how='left')
-        df['estacion'] = df[col_n].fillna(df['cod'])
+        col_depto = next((c for c in df_c.columns if 'depto' in c.lower() or 'departamento' in c.lower()), None)
+        col_prov = next((c for c in df_c.columns if 'prov' in c.lower() or 'provincia' in c.lower()), None)
+        
+        columnas_mapa = ['cod', 'lat', 'lon', col_n]
+        if col_depto: columnas_mapa.append(col_depto)
+        if col_prov: columnas_mapa.append(col_prov)
+
+        df = pd.merge(df_p, df_c[columnas_mapa], on='cod', how='left')
+        df['Pluviómetro'] = df[col_n].fillna(df['cod'])
+        
+        if col_depto: df = df.rename(columns={col_depto: 'Departamento'})
+        else: df['Departamento'] = "S/D"
+            
+        if col_prov: df = df.rename(columns={col_prov: 'Provincia'})
+        else: df['Provincia'] = "S/D"
+
         return df
     except: return pd.DataFrame()
 
 df = cargar_datos_completos()
 
 if not df.empty:
-    # --- BARRA LATERAL ---
     logo_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Logo_INTA.svg/1200px-Logo_INTA.svg.png"
     st.sidebar.image(logo_url, width=80)
     todas_f = sorted(df['fecha'].unique(), reverse=True)
     f_hoy = st.sidebar.date_input("Consultar otra fecha:", todas_f[0], format="DD/MM/YYYY")
 
-    # --- CABECERA PRINCIPAL ---
+    # --- CABECERA ---
     st.markdown(f"""
         <div style="display: flex; align-items: center; margin-bottom: 20px;">
             <img src="{logo_url}" style="height: 45px; margin-right: 15px;">
@@ -83,99 +95,111 @@ if not df.empty:
         </div>
     """, unsafe_allow_html=True)
     
-    t1, t2, t3, t4 = st.tabs([
-        "📍 Mapa e Intensidad", 
-        "📊 Listado Diario", 
-        "📅 Resumen Mensual", 
-        "📈 Comparativa e Histórico"
-    ])
+    t1, t2, t3, t4 = st.tabs(["📍 Mapa", "📊 Listado Diario", "📅 Resumen Mensual", "📈 Histórico"])
 
-    # 1. MAPA OPTIMIZADO
+    # 1. MAPA
     with t1:
-        # Título dinámico para el mapa
+        # CONTROLES DEL MAPA (DENTRO DE LA PESTAÑA)
+        col_tit, col_chk = st.columns([3, 1])
+        
         fecha_formateada = f_hoy.strftime('%d de %B de %Y')
-        st.markdown(f"""
-            <div style="background-color: #f0f2f6; padding: 10px; border-left: 5px solid #1E3A8A; border-radius: 5px; margin-bottom: 15px;">
-                <h3 style="margin: 0; color: #1E3A8A; font-size: 20px;">
-                    ☔ Últimas lluvias registradas: <span style="color: #d32f2f;">{fecha_formateada}</span>
-                </h3>
-            </div>
-        """, unsafe_allow_html=True)
-
+        col_tit.markdown(f'<p style="color: #1E3A8A; font-weight: bold; margin-top:10px;">Lluvias del {fecha_formateada}</p>', unsafe_allow_html=True)
+        
+        # EL CHECKBOX AHORA ESTÁ AQUÍ
+        ver_calor = col_chk.checkbox("🔥 Mapa de Calor", value=False)
+        
         df_dia = df[df['fecha'] == f_hoy].dropna(subset=['lat', 'lon'])
         
         if not df_dia.empty:
-            ver_calor = st.checkbox("🔥 Mostrar Mapa de Calor")
             m = folium.Map(location=[df_dia['lat'].mean(), df_dia['lon'].mean()], zoom_start=7)
-            if ver_calor:
-                heat_data = [[row['lat'], row['lon'], row['mm']] for _, row in df_dia.iterrows() if row['mm'] > 0]
-                if heat_data: HeatMap(heat_data, radius=25, blur=15).add_to(m)
             
+            # CAPA DE CALOR
+            if ver_calor:
+                datos_calor = df_dia[['lat', 'lon', 'mm']].values.tolist()
+                HeatMap(datos_calor, radius=20, blur=15, min_opacity=0.3).add_to(m)
+
+            # MARCADORES
             for _, r in df_dia.iterrows():
                 c_hex = '#d32f2f' if r['mm'] > 50 else '#ef6c00' if r['mm'] > 20 else '#1a73e8'
                 c_fol = 'red' if r['mm'] > 50 else 'orange' if r['mm'] > 20 else 'blue'
                 
                 html_popup = f"""
-                <div style="font-family: Arial; min-width: 200px; padding: 5px;">
-                    <h4 style="margin: 0 0 5px 0; color: {c_hex}; white-space: nowrap;">{r['estacion']}</h4>
-                    <p style="margin: 0; font-size: 13px;">Lluvia: <b>{r['mm']} mm</b><br>Obs: {r['fen']}</p>
+                <div style="font-family: sans-serif; min-width: 200px;">
+                    <h4 style="margin:0; color:{c_hex}; border-bottom:1px solid #ccc;">{r['Pluviómetro']}</h4>
+                    <b>{r['mm']} mm</b><br>
+                    <small>{r['Departamento']}, {r['Provincia']}</small><br>
+                    <i style="color:gray;">{r['Fenómeno atmosférico']}</i>
                 </div>
                 """
-                folium.Marker(
-                    [r['lat'], r['lon']], 
-                    popup=folium.Popup(html_popup, max_width=350),
-                    icon=folium.Icon(color=c_fol, icon='cloud')
-                ).add_to(m)
-
-                folium.map.Marker(
-                    [r['lat'], r['lon']],
-                    icon=folium.DivIcon(
-                        icon_size=(40,20), icon_anchor=(20,-10),
-                        html=f'<div style="color: {c_hex}; font-weight: 900; font-size: 11pt; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff; text-align: center;">{int(r["mm"])}</div>'
-                    )
-                ).add_to(m)
+                folium.Marker([r['lat'], r['lon']], popup=folium.Popup(html_popup, max_width=300), 
+                              icon=folium.Icon(color=c_fol, icon='cloud')).add_to(m)
+                
+                folium.map.Marker([r['lat'], r['lon']], icon=folium.DivIcon(icon_size=(40,20), icon_anchor=(20,-10),
+                    html=f'<div style="color:{c_hex}; font-weight:900; font-size:11pt; text-shadow:1px 1px 0 #fff;">{int(r["mm"])}</div>')).add_to(m)
             
             st_folium(m, width=None, height=550)
-        else:
-            st.warning(f"No se encontraron registros para el día {fecha_formateada}.")
+        else: 
+            st.warning("No hay datos.")
 
     # 2. LISTADO DIARIO
     with t2:
-        st.subheader(f"📊 Registros del día {f_hoy.strftime('%d/%m/%Y')}")
-        df_res = df[df['fecha'] == f_hoy][['estacion', 'mm', 'fen']].sort_values('mm', ascending=False)
-        if not df_res.empty:
-            df_chart = df_res[df_res['mm'] > 0].head(15)
-            if not df_chart.empty:
-                st.bar_chart(df_chart.set_index('estacion')['mm'])
-            st.dataframe(df_res.style.format({"mm": "{:.1f}"}), use_container_width=True, hide_index=True)
-            csv_diario = df_res.to_csv(index=False, sep=';').encode('utf-8-sig')
-            st.download_button("📥 Descargar Planilla", csv_diario, f"lluvia_{f_hoy}.csv", "text/csv")
+        st.subheader(f"Registros del {f_hoy.strftime('%d/%m/%Y')}")
+        df_list = df[df['fecha'] == f_hoy][['Pluviómetro', 'mm', 'Departamento', 'Provincia', 'Fenómeno atmosférico']].sort_values('mm', ascending=False)
+        st.dataframe(df_list.rename(columns={'mm': 'Lluvia (mm)'}), use_container_width=True, hide_index=True)
 
     # 3. RESUMEN MENSUAL
     with t3:
+        st.subheader("📅 Acumulados Mensuales")
         df['Año'] = df['fecha_dt'].dt.year
         df['Mes_Num'] = df['fecha_dt'].dt.month
-        meses = {1:'Ene', 2:'Feb', 3:'Mar', 4:'Abr', 5:'May', 6:'Jun', 7:'Jul', 8:'Ago', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dic'}
-        año_sel = st.selectbox("📅 Año:", sorted(df['Año'].unique(), reverse=True))
-        df_año = df[df['Año'] == año_sel]
-        if not df_año.empty:
-            tabla = df_año.groupby(['estacion', 'Mes_Num'])['mm'].sum().unstack().fillna(0)
-            tabla.columns = [meses[c] for c in tabla.columns]
-            tabla['TOTAL'] = tabla.sum(axis=1)
-            st.dataframe(tabla.style.format("{:.1f}"), use_container_width=True)
+        meses_nombres = {1:'Ene', 2:'Feb', 3:'Mar', 4:'Abr', 5:'May', 6:'Jun', 7:'Jul', 8:'Ago', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dic'}
+        
+        anios = sorted(df['Año'].unique(), reverse=True)
+        sel_anio = st.selectbox("Seleccione Año:", anios)
+        
+        df_mes = df[df['Año'] == sel_anio]
+        if not df_mes.empty:
+            tabla_mensual = df_mes.pivot_table(
+                index=['Provincia', 'Departamento', 'Pluviómetro'], 
+                columns='Mes_Num', 
+                values='mm', 
+                aggfunc='sum'
+            ).fillna(0)
+            
+            tabla_mensual.columns = [meses_nombres[c] for c in tabla_mensual.columns]
+            tabla_mensual['TOTAL'] = tabla_mensual.sum(axis=1)
+            
+            st.dataframe(tabla_mensual.style.format("{:.1f}"), use_container_width=True)
+            
+            csv = tabla_mensual.to_csv(sep=';').encode('utf-8-sig')
+            st.download_button(f"📥 Descargar Resumen {sel_anio}", csv, f"resumen_{sel_anio}.csv", "text/csv")
 
-    # 4. COMPARATIVA
+    # 4. HISTÓRICO
     with t4:
-        st.subheader("📈 Consulta Histórica")
-        est_mult = st.multiselect("Seleccione estaciones:", sorted(df['estacion'].unique()))
-        c_i, c_f = st.columns(2)
-        f_desde = c_i.date_input("Desde:", df['fecha'].min())
-        f_hasta = c_f.date_input("Hasta:", df['fecha'].max())
-        if est_mult:
-            df_comp = df[(df['estacion'].isin(est_mult)) & (df['fecha'] >= f_desde) & (df['fecha'] <= f_hasta)]
-            if not df_comp.empty:
-                chart_data = df_comp.pivot_table(index='fecha', columns='estacion', values='mm').fillna(0)
-                st.area_chart(chart_data)
+        st.subheader("📈 Evolución Temporal")
+        estaciones_lista = sorted(df['Pluviómetro'].unique())
+        sel_estaciones = st.multiselect("Seleccione Pluviómetros para comparar:", estaciones_lista)
+        
+        col1, col2 = st.columns(2)
+        d_desde = col1.date_input("Fecha desde:", df['fecha'].min())
+        d_hasta = col2.date_input("Fecha hasta:", df['fecha'].max())
+        
+        if sel_estaciones:
+            df_hist = df[(df['Pluviómetro'].isin(sel_estaciones)) & 
+                         (df['fecha'] >= d_desde) & 
+                         (df['fecha'] <= d_hasta)]
+            
+            if not df_hist.empty:
+                chart_data = df_hist.pivot_table(index='fecha', columns='Pluviómetro', values='mm', aggfunc='sum').fillna(0)
+                st.line_chart(chart_data)
+                
+                st.write("### Detalle de registros")
+                df_hist_view = df_hist[['fecha', 'Pluviómetro', 'mm', 'Departamento', 'Fenómeno atmosférico']].sort_values('fecha', ascending=False)
+                st.dataframe(df_hist_view.rename(columns={'fecha': 'Fecha', 'mm': 'Lluvia (mm)'}), use_container_width=True, hide_index=True)
+            else:
+                st.info("No hay datos en el rango seleccionado.")
+        else:
+            st.info("Por favor, seleccione al menos un pluviómetro para ver el gráfico.")
 
 else:
-    st.error("No se pudo conectar con la base de datos de INTA.")
+    st.error("No se pudo conectar con la base de datos.")
