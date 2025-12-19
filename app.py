@@ -9,7 +9,7 @@ import locale
 
 # 1. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(
-    page_title="Monitor PP - INTA", 
+    page_title="Red Pluviométrica Salta - Jujuy", 
     page_icon="https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Logo_INTA.svg/1200px-Logo_INTA.svg.png", 
     layout="wide"
 )
