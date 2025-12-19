@@ -104,12 +104,6 @@ if not df.empty:
                 margin-bottom: 15px;
                 gap: 12px;
             }}
-            .map-controls {{
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                margin-bottom: 10px;
-            }}
             .fecha-label {{
                 color: #1E3A8A;
                 font-weight: bold;
@@ -209,26 +203,15 @@ if not df.empty:
         d_hasta = col2.date_input("Hasta:", df['fecha'].max())
         
         if sel_estaciones:
-            # 1. Filtramos datos
             df_hist = df[(df['Pluviómetro'].isin(sel_estaciones)) & (df['fecha'] >= d_desde) & (df['fecha'] <= d_hasta)].copy()
-            
-            # 2. Solo días con lluvia > 0 para que las barras sean gruesas y no haya huecos
             df_hist = df_hist[df_hist['mm'] > 0]
 
             if not df_hist.empty:
-                # 3. ORDENAR por fecha real primero
                 df_hist = df_hist.sort_values('fecha')
-
-                # 4. CREAR una columna de texto para el eje X (esto garantiza que no salgan números raros)
-                # Formato: 15/12/2023
                 df_hist['fecha_texto'] = df_hist['fecha_dt'].dt.strftime('%d/%m/%Y')
 
-                # --- GRÁFICO CON ALTAIR ---
                 barras = alt.Chart(df_hist).mark_bar().encode(
-                    x=alt.X('fecha_texto:N', # Usamos la nueva columna de texto
-                            title='Fecha (Días con registro)', 
-                            sort=None, # Mantiene el orden cronológico que aplicamos arriba
-                            axis=alt.Axis(labelAngle=-45)), 
+                    x=alt.X('fecha_texto:N', title='Fecha (Días con registro)', sort=None, axis=alt.Axis(labelAngle=-45)), 
                     y=alt.Y('mm:Q', title='Lluvia (mm)', stack=None),
                     color=alt.Color('Pluviómetro:N', title='Pluviómetro'),
                     xOffset='Pluviómetro:N'
@@ -236,9 +219,26 @@ if not df.empty:
                 
                 st.altair_chart(barras, use_container_width=True)
                 
-                # --- TABLA ---
                 df_hist_view = df_hist[['fecha', 'Pluviómetro', 'mm', 'Departamento', 'Fenómeno atmosférico']].sort_values('fecha', ascending=False)
                 st.dataframe(df_hist_view.rename(columns={'fecha': 'Fecha', 'mm': 'Lluvia (mm)'}), use_container_width=True, hide_index=True)
+
+    # --- BOTÓN DE INFORMACIÓN AL FINAL DE LA PÁGINA ---
+    st.markdown("---")
+    with st.expander("ℹ️ Información sobre la Red Pluviométrica"):
+        st.write("""
+        La Red Pluviométrica es una herramienta tecnológica desarrollada por el INTA Centro Regional Salta y Jujuy, cuyo objetivo es recopilar datos precisos y confiables sobre la precipitación en diversas áreas geográficas. Estos datos son esenciales no solo para la gestión agrícola, sino también para la toma de decisiones de otros actores, como los gobiernos locales, que pueden utilizarlos para la planificación y gestión de recursos hídricos, la prevención de desastres naturales y el desarrollo sostenible en sus comunidades.
+        
+        La Red Pluviométrica es una iniciativa que reúne el trabajo articulado y mancomunado entre INTA, productores locales y particulares que colaboran diariamente con la información registrada por sus pluviómetros.
+        
+        La ubicación de los pluviómetros está georreferenciada y los datos se recopilan mediante la plataforma INTA Territorios. La misma se desarrolló utilizando el software Kobo Toolbox y Kobo Collect, herramientas de código abierto que facilitan la colecta eficiente de datos y optimizan la exportación y la integración de los mismos, para su posterior análisis en sistemas de información geográfica.
+        Se pone a disposición de la comunidad paneles de control interactivos que visualizan la red de pluviómetros. Estos paneles permiten consultar los valores diarios y mensuales de precipitaciones desde octubre de 2024 hasta la fecha actual, acompañados de gráficos comparativos que facilitan la comprensión y análisis de los datos.
+
+        **Equipo de trabajo:**
+        Lic. Inf. Hernán Elena (Lab. Teledetección y SIG - Grupo RRNN), Obs. Met. Germán Guanca (Meteorología - Grupo RRNN), Ing. Agr. Rafael Saldaño (OIT Coronel Moldes) - Ing. Agr. Daniela Moneta (AER Valle de Lerma). INTA EEA Salta - Ing. Juan Ramón Rojas (INTA-AER Santa Victoria Este) - Ing. Agr. Daniel Lamberti (INTA AER Perico) - Tec. Recursos Hídricos Fátima del Valle Miranda (INTA AER Palma Sola) - Ing. Agr. Florencia Diaz (INTA AER Palma Sola), Héctor Diaz (INTA AER J.V. Gonzalez), Carlos G. Cabrera (INTA AER J.V. Gonzalez), Lucas Diaz (INTA AER Cafayate).
+        
+        **Colaboradores:**
+        Nicolás Uriburu, Nicolás Villegas, Matias Lanusse, Marcela Lopez, Martín Amado, Agustín Sanz Navamuel, Luis Fernández Acevedo, Miguel A. Boasso, Luis Zavaleta, Mario Lambrisca, Noelia Rovedatti, Matías Canonica, Alejo Alvarez, Javier Montes, Guillermo Patron Costa, Sebastián Mendilaharzu, Francisco Chehda, Jorge Robles, Gustavo Soricich, Javier Atea, Luis D. Elias, Leandro Carrizo, Daiana Núñez, Fátima González, Santiago Villalba, Juan Collado, Julio Collado, Estanislao Lara, Carlos Cruz, Daniel Espinoza, Fabian Álvarez, Lucio Señoranis, Rene Vallejos Rueda, Héctor Miranda, Emanuel Arias, Oscar Herrera, Francisca Vacaflor, Zaturnino Ceballos, Alcides Ceballos, Juan Ignacio Pearson, Pascual Erazo, Dario Romero, Luisa Andrada, Alejandro Ricalde, Odorico Romero, Lucas Campos, Sebastián Diaz, Carlos Sanz, Gabriel Brinder, Gastón Vizgarra, Diego Sulca, Alicia Tapia, Roberto Ponce, Sergio Cassinelli, María Zamboni, Andres Flores, Tomás Lienemann, Carmen Carattoni, Cecilia Carattoni, Tito Donoso, Javier Aprile, Carla Carattoni.
+        """)
 
 else:
     st.error("No se pudo conectar con la base de datos.")
