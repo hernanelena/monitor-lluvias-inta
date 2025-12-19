@@ -5,9 +5,20 @@ import numpy as np
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import HeatMap
+import locale
 
 # 1. CONFIGURACIÓN DE PÁGINA
-st.set_page_config(page_title="Monitor PP - INTA", page_icon="🌧️", layout="wide")
+st.set_page_config(
+    page_title="Monitor PP - INTA", 
+    page_icon="https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Logo_INTA.svg/1200px-Logo_INTA.svg.png", 
+    layout="wide"
+)
+
+# Intentar poner fecha en español (si el sistema lo permite)
+try:
+    locale.setlocale(locale.LC_TIME, "es_AR.UTF-8")
+except:
+    pass
 
 # --- CREDENCIALES ---
 URL_PRECIPITACIONES = "https://territorios.inta.gob.ar/assets/aYqLUVvU3EYiDa7NoJbPKF/submissions/?format=json"
@@ -56,10 +67,21 @@ def cargar_datos_completos():
 df = cargar_datos_completos()
 
 if not df.empty:
-    st.title("🌧️ Monitor Pluviométrico INTA Salta-Jujuy")
-    
+    # --- BARRA LATERAL ---
+    logo_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Logo_INTA.svg/1200px-Logo_INTA.svg.png"
+    st.sidebar.image(logo_url, width=80)
     todas_f = sorted(df['fecha'].unique(), reverse=True)
-    f_hoy = st.sidebar.date_input("Fecha de consulta diaria:", todas_f[0], format="DD/MM/YYYY")
+    f_hoy = st.sidebar.date_input("Consultar otra fecha:", todas_f[0], format="DD/MM/YYYY")
+
+    # --- CABECERA PRINCIPAL ---
+    st.markdown(f"""
+        <div style="display: flex; align-items: center; margin-bottom: 20px;">
+            <img src="{logo_url}" style="height: 45px; margin-right: 15px;">
+            <h1 style="font-size: 28px !important; font-weight: bold; color: #1E3A8A; margin: 0; line-height: 1.2; border: none;">
+                Red Pluviométrica Salta - Jujuy
+            </h1>
+        </div>
+    """, unsafe_allow_html=True)
     
     t1, t2, t3, t4 = st.tabs([
         "📍 Mapa e Intensidad", 
@@ -70,10 +92,21 @@ if not df.empty:
 
     # 1. MAPA OPTIMIZADO
     with t1:
+        # Título dinámico para el mapa
+        fecha_formateada = f_hoy.strftime('%d de %B de %Y')
+        st.markdown(f"""
+            <div style="background-color: #f0f2f6; padding: 10px; border-left: 5px solid #1E3A8A; border-radius: 5px; margin-bottom: 15px;">
+                <h3 style="margin: 0; color: #1E3A8A; font-size: 20px;">
+                    ☔ Últimas lluvias registradas: <span style="color: #d32f2f;">{fecha_formateada}</span>
+                </h3>
+            </div>
+        """, unsafe_allow_html=True)
+
         df_dia = df[df['fecha'] == f_hoy].dropna(subset=['lat', 'lon'])
+        
         if not df_dia.empty:
             ver_calor = st.checkbox("🔥 Mostrar Mapa de Calor")
-            m = folium.Map(location=[df_dia['lat'].mean(), df_dia['lon'].mean()], zoom_start=8)
+            m = folium.Map(location=[df_dia['lat'].mean(), df_dia['lon'].mean()], zoom_start=7)
             if ver_calor:
                 heat_data = [[row['lat'], row['lon'], row['mm']] for _, row in df_dia.iterrows() if row['mm'] > 0]
                 if heat_data: HeatMap(heat_data, radius=25, blur=15).add_to(m)
@@ -84,16 +117,10 @@ if not df.empty:
                 
                 html_popup = f"""
                 <div style="font-family: Arial; min-width: 200px; padding: 5px;">
-                    <h4 style="margin: 0 0 5px 0; color: {c_hex}; white-space: nowrap;">
-                        {r['estacion']}
-                    </h4>
-                    <p style="margin: 0; font-size: 13px;">
-                        Lluvia: <b>{r['mm']} mm</b><br>
-                        Obs: <span style="color: #666;">{r['fen']}</span>
-                    </p>
+                    <h4 style="margin: 0 0 5px 0; color: {c_hex}; white-space: nowrap;">{r['estacion']}</h4>
+                    <p style="margin: 0; font-size: 13px;">Lluvia: <b>{r['mm']} mm</b><br>Obs: {r['fen']}</p>
                 </div>
                 """
-                
                 folium.Marker(
                     [r['lat'], r['lon']], 
                     popup=folium.Popup(html_popup, max_width=350),
@@ -103,44 +130,26 @@ if not df.empty:
                 folium.map.Marker(
                     [r['lat'], r['lon']],
                     icon=folium.DivIcon(
-                        icon_size=(40,20),
-                        icon_anchor=(20,-10),
-                        html=f"""<div class="zoom-label" style="
-                            color: {c_hex}; font-weight: 900; font-size: 11pt;
-                            text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;
-                            text-align: center;">{int(r['mm'])}</div>"""
+                        icon_size=(40,20), icon_anchor=(20,-10),
+                        html=f'<div style="color: {c_hex}; font-weight: 900; font-size: 11pt; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff; text-align: center;">{int(r["mm"])}</div>'
                     )
                 ).add_to(m)
             
-            st.markdown("<style>.zoom-label { display: none; } .leaflet-zoom-10 .zoom-label, .leaflet-zoom-11 .zoom-label, .leaflet-zoom-12 .zoom-label, .leaflet-zoom-13 .zoom-label, .leaflet-zoom-14 .zoom-label, .leaflet-zoom-15 .zoom-label, .leaflet-zoom-16 .zoom-label, .leaflet-zoom-17 .zoom-label, .leaflet-zoom-18 .zoom-label { display: block !important; }</style>", unsafe_allow_html=True)
-            st_folium(m, width=None, height=500)
-
-    # 2. LISTADO DIARIO CON GRÁFICO DE BARRAS
-    with t2:
-        st.subheader(f"Registros del día {f_hoy.strftime('%d/%m/%Y')}")
-        df_res = df[df['fecha'] == f_hoy][['estacion', 'mm', 'fen']].sort_values('mm', ascending=False)
-        
-        if not df_res.empty:
-            # --- NUEVO: GRÁFICO DE BARRAS ---
-            # Filtramos solo estaciones con lluvia para el gráfico
-            df_chart = df_res[df_res['mm'] > 0].head(15) # Top 15 para no saturar
-            
-            if not df_chart.empty:
-                st.write("### 📊 Top estaciones con mayores precipitaciones (mm)")
-                # Asignar colores para el gráfico
-                df_chart['color'] = df_chart['mm'].apply(lambda x: '#d32f2f' if x > 50 else '#ef6c00' if x > 20 else '#1a73e8')
-                
-                st.bar_chart(df_chart.set_index('estacion')['mm'], color=None) 
-                # Nota: streamlit bar_chart básico no soporta colores dinámicos por fila fácilmente sin altair, 
-                # pero muestra la tendencia perfectamente.
-            
-            st.write("### 📋 Detalle General")
-            st.dataframe(df_res.style.format({"mm": "{:.1f}"}), use_container_width=True, hide_index=True)
-            
-            csv_diario = df_res.to_csv(index=False, sep=';').encode('utf-8-sig')
-            st.download_button(f"📥 Descargar Planilla {f_hoy}", csv_diario, f"lluvia_{f_hoy}.csv", "text/csv")
+            st_folium(m, width=None, height=550)
         else:
-            st.info("No hay registros para la fecha seleccionada.")
+            st.warning(f"No se encontraron registros para el día {fecha_formateada}.")
+
+    # 2. LISTADO DIARIO
+    with t2:
+        st.subheader(f"📊 Registros del día {f_hoy.strftime('%d/%m/%Y')}")
+        df_res = df[df['fecha'] == f_hoy][['estacion', 'mm', 'fen']].sort_values('mm', ascending=False)
+        if not df_res.empty:
+            df_chart = df_res[df_res['mm'] > 0].head(15)
+            if not df_chart.empty:
+                st.bar_chart(df_chart.set_index('estacion')['mm'])
+            st.dataframe(df_res.style.format({"mm": "{:.1f}"}), use_container_width=True, hide_index=True)
+            csv_diario = df_res.to_csv(index=False, sep=';').encode('utf-8-sig')
+            st.download_button("📥 Descargar Planilla", csv_diario, f"lluvia_{f_hoy}.csv", "text/csv")
 
     # 3. RESUMEN MENSUAL
     with t3:
@@ -154,29 +163,19 @@ if not df.empty:
             tabla.columns = [meses[c] for c in tabla.columns]
             tabla['TOTAL'] = tabla.sum(axis=1)
             st.dataframe(tabla.style.format("{:.1f}"), use_container_width=True)
-            csv_anual = tabla.reset_index().to_csv(index=False, sep=';').encode('utf-8-sig')
-            st.download_button(f"📥 Descargar Planilla Anual {año_sel}", csv_anual, f"anual_{año_sel}.csv", "text/csv")
 
-    # 4. COMPARATIVA Y RANGO
+    # 4. COMPARATIVA
     with t4:
-        st.subheader("Consulta Histórica por Pluviómetro")
-        est_mult = st.multiselect("Seleccione una o más estaciones:", sorted(df['estacion'].unique()))
+        st.subheader("📈 Consulta Histórica")
+        est_mult = st.multiselect("Seleccione estaciones:", sorted(df['estacion'].unique()))
         c_i, c_f = st.columns(2)
-        f_desde = c_i.date_input("Fecha Inicio:", df['fecha'].min(), format="DD/MM/YYYY")
-        f_hasta = c_f.date_input("Fecha Fin:", df['fecha'].max(), format="DD/MM/YYYY")
-        
+        f_desde = c_i.date_input("Desde:", df['fecha'].min())
+        f_hasta = c_f.date_input("Hasta:", df['fecha'].max())
         if est_mult:
             df_comp = df[(df['estacion'].isin(est_mult)) & (df['fecha'] >= f_desde) & (df['fecha'] <= f_hasta)]
             if not df_comp.empty:
                 chart_data = df_comp.pivot_table(index='fecha', columns='estacion', values='mm').fillna(0)
                 st.area_chart(chart_data)
-                
-                st.write("---")
-                st.write("### 📥 Descarga de Datos Filtrados")
-                df_download = df_comp[['fecha', 'estacion', 'mm', 'fen']].sort_values(['estacion', 'fecha'])
-                csv_rango = df_download.to_csv(index=False, sep=';').encode('utf-8-sig')
-                st.download_button("📥 Descargar Período Seleccionado", csv_rango, "historico_lluvias.csv", "text/csv", use_container_width=True)
-                st.dataframe(df_download, use_container_width=True, hide_index=True)
 
 else:
-    st.error("Error al obtener datos.")
+    st.error("No se pudo conectar con la base de datos de INTA.")
