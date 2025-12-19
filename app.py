@@ -23,6 +23,7 @@ except:
 URL_PRECIPITACIONES = "https://territorios.inta.gob.ar/assets/aYqLUVvU3EYiDa7NoJbPKF/submissions/?format=json"
 URL_MAPA = "https://territorios.inta.gob.ar/assets/aFwWKNGXZKppgNYKa33wC8/submissions/?format=json"
 TOKEN = st.secrets["INTA_TOKEN"]
+
 HEADERS = {'Authorization': f'Token {TOKEN}'}
 
 # --- PROCESAMIENTO DE DATOS ---
@@ -85,7 +86,7 @@ if not df.empty:
     todas_f = sorted(df['fecha'].unique(), reverse=True)
     f_hoy = st.sidebar.date_input("Consultar otra fecha:", todas_f[0], format="DD/MM/YYYY")
 
-    # --- CABECERA RESPONSIVA CON AZUL #1E3A8A ---
+    # --- CSS Y CABECERA ---
     st.markdown(f"""
         <style>
             .main-title {{
@@ -101,9 +102,32 @@ if not df.empty:
                 margin-bottom: 15px;
                 gap: 12px;
             }}
+            /* Contenedor para alinear Fecha y Checkbox en una sola línea */
+            .map-controls {{
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 10px;
+            }}
+            .fecha-label {{
+                color: #1E3A8A;
+                font-weight: bold;
+                font-size: 15px;
+                margin: 0;
+            }}
+            .separador {{
+                color: #CCC;
+                font-weight: normal;
+            }}
             @media (max-width: 640px) {{
                 .main-title {{ font-size: 18px !important; }}
                 .header-logo {{ height: 35px !important; }}
+                .fecha-label {{ font-size: 13px; }}
+            }}
+            /* Estilo para reducir el espacio del checkbox en la UI de Streamlit */
+            div[data-testid="stCheckbox"] {{
+                margin-bottom: 0px;
+                margin-top: -5px;
             }}
         </style>
         <div class="header-container">
@@ -116,11 +140,14 @@ if not df.empty:
 
     # 1. MAPA
     with t1:
-        col_tit, col_chk = st.columns([2, 1])
-        fecha_formateada = f_hoy.strftime('%d/%m/%Y')
-        col_tit.markdown(f'<p style="color: #1E3A8A; font-weight: bold; font-size: 15px; margin-top:5px;">Lluvias del {fecha_formateada}</p>', unsafe_allow_html=True)
+        # Fila de control compacta
+        fecha_f = f_hoy.strftime('%d/%m/%Y')
+        col_ctrl1, col_ctrl2 = st.columns([0.55, 0.45])
         
-        ver_calor = col_chk.checkbox("🔥 Calor", value=False)
+        with col_ctrl1:
+            st.markdown(f'<p class="fecha-label">Lluvias del {fecha_f} <span class="separador">|</span></p>', unsafe_allow_html=True)
+        with col_ctrl2:
+            ver_calor = st.checkbox("🔥 Calor", value=False)
         
         df_dia = df[df['fecha'] == f_hoy].dropna(subset=['lat', 'lon'])
         
@@ -153,7 +180,7 @@ if not df.empty:
         else: 
             st.warning("No hay datos.")
 
-    # [Pestañas T2, T3 y T4 se mantienen con la lógica de popup original y estilo]
+    # Las demás pestañas (t2, t3, t4) se mantienen igual que en tu código original
     with t2:
         st.subheader(f"Registros del {f_hoy.strftime('%d/%m/%Y')}")
         df_list = df[df['fecha'] == f_hoy][['Pluviómetro', 'mm', 'Departamento', 'Provincia', 'Fenómeno atmosférico']].sort_values('mm', ascending=False)
