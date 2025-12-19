@@ -6,6 +6,7 @@ import folium
 from streamlit_folium import st_folium
 from folium.plugins import HeatMap
 import locale
+import altair as alt # Se añade para el gráfico de barras no apilado
 
 # 1. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(
@@ -23,6 +24,7 @@ except:
 URL_PRECIPITACIONES = "https://territorios.inta.gob.ar/assets/aYqLUVvU3EYiDa7NoJbPKF/submissions/?format=json"
 URL_MAPA = "https://territorios.inta.gob.ar/assets/aFwWKNGXZKppgNYKa33wC8/submissions/?format=json"
 TOKEN = st.secrets["INTA_TOKEN"]
+
 
 HEADERS = {'Authorization': f'Token {TOKEN}'}
 
@@ -102,7 +104,6 @@ if not df.empty:
                 margin-bottom: 15px;
                 gap: 12px;
             }}
-            /* Contenedor para alinear Fecha y Checkbox en una sola línea */
             .map-controls {{
                 display: flex;
                 align-items: center;
@@ -124,7 +125,6 @@ if not df.empty:
                 .header-logo {{ height: 35px !important; }}
                 .fecha-label {{ font-size: 13px; }}
             }}
-            /* Estilo para reducir el espacio del checkbox en la UI de Streamlit */
             div[data-testid="stCheckbox"] {{
                 margin-bottom: 0px;
                 margin-top: -5px;
@@ -140,7 +140,6 @@ if not df.empty:
 
     # 1. MAPA
     with t1:
-        # Fila de control compacta
         fecha_f = f_hoy.strftime('%d/%m/%Y')
         col_ctrl1, col_ctrl2 = st.columns([0.55, 0.45])
         
@@ -180,7 +179,6 @@ if not df.empty:
         else: 
             st.warning("No hay datos.")
 
-    # Las demás pestañas (t2, t3, t4) se mantienen igual que en tu código original
     with t2:
         st.subheader(f"Registros del {f_hoy.strftime('%d/%m/%Y')}")
         df_list = df[df['fecha'] == f_hoy][['Pluviómetro', 'mm', 'Departamento', 'Provincia', 'Fenómeno atmosférico']].sort_values('mm', ascending=False)
@@ -209,11 +207,36 @@ if not df.empty:
         col1, col2 = st.columns(2)
         d_desde = col1.date_input("Desde:", df['fecha'].min())
         d_hasta = col2.date_input("Hasta:", df['fecha'].max())
+        
         if sel_estaciones:
-            df_hist = df[(df['Pluviómetro'].isin(sel_estaciones)) & (df['fecha'] >= d_desde) & (df['fecha'] <= d_hasta)]
+            # 1. Filtramos datos
+            df_hist = df[(df['Pluviómetro'].isin(sel_estaciones)) & (df['fecha'] >= d_desde) & (df['fecha'] <= d_hasta)].copy()
+            
+            # 2. Solo días con lluvia > 0 para que las barras sean gruesas y no haya huecos
+            df_hist = df_hist[df_hist['mm'] > 0]
+
             if not df_hist.empty:
-                chart_data = df_hist.pivot_table(index='fecha', columns='Pluviómetro', values='mm', aggfunc='sum').fillna(0)
-                st.line_chart(chart_data)
+                # 3. ORDENAR por fecha real primero
+                df_hist = df_hist.sort_values('fecha')
+
+                # 4. CREAR una columna de texto para el eje X (esto garantiza que no salgan números raros)
+                # Formato: 15/12/2023
+                df_hist['fecha_texto'] = df_hist['fecha_dt'].dt.strftime('%d/%m/%Y')
+
+                # --- GRÁFICO CON ALTAIR ---
+                barras = alt.Chart(df_hist).mark_bar().encode(
+                    x=alt.X('fecha_texto:N', # Usamos la nueva columna de texto
+                            title='Fecha (Días con registro)', 
+                            sort=None, # Mantiene el orden cronológico que aplicamos arriba
+                            axis=alt.Axis(labelAngle=-45)), 
+                    y=alt.Y('mm:Q', title='Lluvia (mm)', stack=None),
+                    color=alt.Color('Pluviómetro:N', title='Pluviómetro'),
+                    xOffset='Pluviómetro:N'
+                ).properties(height=400).interactive()
+                
+                st.altair_chart(barras, use_container_width=True)
+                
+                # --- TABLA ---
                 df_hist_view = df_hist[['fecha', 'Pluviómetro', 'mm', 'Departamento', 'Fenómeno atmosférico']].sort_values('fecha', ascending=False)
                 st.dataframe(df_hist_view.rename(columns={'fecha': 'Fecha', 'mm': 'Lluvia (mm)'}), use_container_width=True, hide_index=True)
 
