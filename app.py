@@ -4,9 +4,9 @@ import requests
 import numpy as np
 import folium
 from streamlit_folium import st_folium
-from folium.plugins import HeatMap
+from folium.plugins import HeatMap, LocateControl
 import locale
-import altair as alt # Se añade para el gráfico de barras no apilado
+import altair as alt
 
 # 1. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(
@@ -24,7 +24,6 @@ except:
 URL_PRECIPITACIONES = "https://territorios.inta.gob.ar/assets/aYqLUVvU3EYiDa7NoJbPKF/submissions/?format=json"
 URL_MAPA = "https://territorios.inta.gob.ar/assets/aFwWKNGXZKppgNYKa33wC8/submissions/?format=json"
 TOKEN = st.secrets["INTA_TOKEN"]
-
 
 HEADERS = {'Authorization': f'Token {TOKEN}'}
 
@@ -91,38 +90,12 @@ if not df.empty:
     # --- CSS Y CABECERA ---
     st.markdown(f"""
         <style>
-            .main-title {{
-                font-weight: bold; 
-                color: #1E3A8A !important; 
-                margin: 0; 
-                line-height: 1.1;
-                font-size: 24px;
-            }}
-            .header-container {{
-                display: flex; 
-                align-items: center; 
-                margin-bottom: 15px;
-                gap: 12px;
-            }}
-            .fecha-label {{
-                color: #1E3A8A;
-                font-weight: bold;
-                font-size: 15px;
-                margin: 0;
-            }}
-            .separador {{
-                color: #CCC;
-                font-weight: normal;
-            }}
-            @media (max-width: 640px) {{
-                .main-title {{ font-size: 18px !important; }}
-                .header-logo {{ height: 35px !important; }}
-                .fecha-label {{ font-size: 13px; }}
-            }}
-            div[data-testid="stCheckbox"] {{
-                margin-bottom: 0px;
-                margin-top: -5px;
-            }}
+            .main-title {{ font-weight: bold; color: #1E3A8A !important; margin: 0; line-height: 1.1; font-size: 24px; }}
+            .header-container {{ display: flex; align-items: center; margin-bottom: 15px; gap: 12px; }}
+            .fecha-label {{ color: #1E3A8A; font-weight: bold; font-size: 15px; margin: 0; }}
+            .separador {{ color: #CCC; font-weight: normal; }}
+            @media (max-width: 640px) {{ .main-title {{ font-size: 18px !important; }} .header-logo {{ height: 35px !important; }} }}
+            div[data-testid="stCheckbox"] {{ margin-bottom: 0px; margin-top: -5px; }}
         </style>
         <div class="header-container">
             <img src="{logo_url}" class="header-logo" style="height: 45px;">
@@ -145,7 +118,42 @@ if not df.empty:
         df_dia = df[df['fecha'] == f_hoy].dropna(subset=['lat', 'lon'])
         
         if not df_dia.empty:
-            m = folium.Map(location=[df_dia['lat'].mean(), df_dia['lon'].mean()], zoom_start=7)
+            m = folium.Map(location=[df_dia['lat'].mean(), df_dia['lon'].mean()], zoom_start=7, tiles=None)
+            
+            # --- CAPAS BASE (Argenmap primero para que sea la activa) ---
+            google_hibrido = "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
+            folium.TileLayer(
+                tiles=google_hibrido, 
+                attr='Google', 
+                name='Google Satélite', 
+                overlay=False,
+                control=True
+            ).add_to(m)
+            
+            argenmap_url = "https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png"
+            folium.TileLayer(
+                tiles=argenmap_url,
+                attr='Instituto Geográfico Nacional',
+                name='Argenmap (IGN)',
+                overlay=False,
+                control=True
+            ).add_to(m)
+
+           
+
+            # --- BOTÓN DE UBICACIÓN ---
+            LocateControl(
+                auto_start=False,
+                fly_to=True,
+                strings={
+                    "title": "Mostrar mi ubicación actual",
+                    "popup": "Usted se encuentra aquí",
+                    "outsideMapBoundsMsg": "Parece que estás fuera de los límites del mapa"
+                },
+                inner_radius=5
+            ).add_to(m)
+
+            folium.LayerControl(position='topright', collapsed=True).add_to(m)
             
             if ver_calor:
                 datos_calor = df_dia[['lat', 'lon', 'mm']].values.tolist()
@@ -154,20 +162,9 @@ if not df.empty:
             for _, r in df_dia.iterrows():
                 c_hex = '#d32f2f' if r['mm'] > 50 else '#ef6c00' if r['mm'] > 20 else '#1a73e8'
                 c_fol = 'red' if r['mm'] > 50 else 'orange' if r['mm'] > 20 else 'blue'
-                
-                html_popup = f"""
-                <div style="font-family: sans-serif; min-width: 200px;">
-                    <h4 style="margin:0; color:{c_hex}; border-bottom:1px solid #ccc;">{r['Pluviómetro']}</h4>
-                    <b>{r['mm']} mm</b><br>
-                    <small>{r['Departamento']}, {r['Provincia']}</small><br>
-                    <i style="color:gray;">{r['Fenómeno atmosférico']}</i>
-                </div>
-                """
-                folium.Marker([r['lat'], r['lon']], popup=folium.Popup(html_popup, max_width=300), 
-                              icon=folium.Icon(color=c_fol, icon='cloud')).add_to(m)
-                
-                folium.map.Marker([r['lat'], r['lon']], icon=folium.DivIcon(icon_size=(40,20), icon_anchor=(20,-10),
-                    html=f'<div style="color:{c_hex}; font-weight:900; font-size:11pt; text-shadow:1px 1px 0 #fff;">{int(r["mm"])}</div>')).add_to(m)
+                html_popup = f"""<div style="font-family: sans-serif; min-width: 200px;"><h4 style="margin:0; color:{c_hex}; border-bottom:1px solid #ccc;">{r['Pluviómetro']}</h4><b>{r['mm']} mm</b><br><small>{r['Departamento']}, {r['Provincia']}</small><br><i style="color:gray;">{r['Fenómeno atmosférico']}</i></div>"""
+                folium.Marker([r['lat'], r['lon']], popup=folium.Popup(html_popup, max_width=300), icon=folium.Icon(color=c_fol, icon='cloud')).add_to(m)
+                folium.map.Marker([r['lat'], r['lon']], icon=folium.DivIcon(icon_size=(40,20), icon_anchor=(20,-10), html=f'<div style="color:{c_hex}; font-weight:900; font-size:11pt; text-shadow:1px 1px 0 #fff;">{int(r["mm"])}</div>')).add_to(m)
             
             st_folium(m, width=None, height=500)
         else: 
@@ -201,28 +198,18 @@ if not df.empty:
         col1, col2 = st.columns(2)
         d_desde = col1.date_input("Desde:", df['fecha'].min())
         d_hasta = col2.date_input("Hasta:", df['fecha'].max())
-        
         if sel_estaciones:
             df_hist = df[(df['Pluviómetro'].isin(sel_estaciones)) & (df['fecha'] >= d_desde) & (df['fecha'] <= d_hasta)].copy()
             df_hist = df_hist[df_hist['mm'] > 0]
-
             if not df_hist.empty:
                 df_hist = df_hist.sort_values('fecha')
                 df_hist['fecha_texto'] = df_hist['fecha_dt'].dt.strftime('%d/%m/%Y')
-
-                barras = alt.Chart(df_hist).mark_bar().encode(
-                    x=alt.X('fecha_texto:N', title='Fecha (Días con registro)', sort=None, axis=alt.Axis(labelAngle=-45)), 
-                    y=alt.Y('mm:Q', title='Lluvia (mm)', stack=None),
-                    color=alt.Color('Pluviómetro:N', title='Pluviómetro'),
-                    xOffset='Pluviómetro:N'
-                ).properties(height=400).interactive()
-                
+                barras = alt.Chart(df_hist).mark_bar().encode(x=alt.X('fecha_texto:N', title='Fecha (Días con registro)', sort=None, axis=alt.Axis(labelAngle=-45)), y=alt.Y('mm:Q', title='Lluvia (mm)', stack=None), color=alt.Color('Pluviómetro:N', title='Pluviómetro'), xOffset='Pluviómetro:N').properties(height=400).interactive()
                 st.altair_chart(barras, use_container_width=True)
-                
                 df_hist_view = df_hist[['fecha', 'Pluviómetro', 'mm', 'Departamento', 'Fenómeno atmosférico']].sort_values('fecha', ascending=False)
                 st.dataframe(df_hist_view.rename(columns={'fecha': 'Fecha', 'mm': 'Lluvia (mm)'}), use_container_width=True, hide_index=True)
 
-    # --- BOTÓN DE INFORMACIÓN AL FINAL DE LA PÁGINA ---
+    # --- INFORMACIÓN INSTITUCIONAL COMPLETA ---
     st.markdown("---")
     with st.expander("ℹ️ Información sobre la Red Pluviométrica"):
         st.write("""
@@ -231,6 +218,7 @@ if not df.empty:
         La Red Pluviométrica es una iniciativa que reúne el trabajo articulado y mancomunado entre INTA, productores locales y particulares que colaboran diariamente con la información registrada por sus pluviómetros.
         
         La ubicación de los pluviómetros está georreferenciada y los datos se recopilan mediante la plataforma INTA Territorios. La misma se desarrolló utilizando el software Kobo Toolbox y Kobo Collect, herramientas de código abierto que facilitan la colecta eficiente de datos y optimizan la exportación y la integración de los mismos, para su posterior análisis en sistemas de información geográfica.
+        
         Los datos se registran como día pluviométrico. Día pluviométrico es un período de 24 horas, que va de una hora específica (comúnmente las 9 AM) de un día hasta la misma hora del día siguiente, utilizado para registrar la cantidad total de precipitación (lluvia) caída, estandarizando las mediciones meteorológicas. La lluvia medida a las 9 AM de un día corresponde a la acumulada desde las 9 AM del día anterior. 
         
         Se pone a disposición de la comunidad paneles de control interactivos que visualizan la red de pluviómetros. Estos paneles permiten consultar los valores diarios y mensuales de precipitaciones desde octubre de 2024 hasta la fecha actual, acompañados de gráficos comparativos que facilitan la comprensión y análisis de los datos.
@@ -241,11 +229,10 @@ if not df.empty:
         **Colaboradores:**
         Nicolás Uriburu, Nicolás Villegas, Matias Lanusse, Marcela Lopez, Martín Amado, Agustín Sanz Navamuel, Luis Fernández Acevedo, Miguel A. Boasso, Luis Zavaleta, Mario Lambrisca, Noelia Rovedatti, Matías Canonica, Alejo Alvarez, Javier Montes, Guillermo Patron Costa, Sebastián Mendilaharzu, Francisco Chehda, Jorge Robles, Gustavo Soricich, Javier Atea, Luis D. Elias, Leandro Carrizo, Daiana Núñez, Fátima González, Santiago Villalba, Juan Collado, Julio Collado, Estanislao Lara, Carlos Cruz, Daniel Espinoza, Fabian Álvarez, Lucio Señoranis, Rene Vallejos Rueda, Héctor Miranda, Emanuel Arias, Oscar Herrera, Francisca Vacaflor, Zaturnino Ceballos, Alcides Ceballos, Juan Ignacio Pearson, Pascual Erazo, Dario Romero, Luisa Andrada, Alejandro Ricalde, Odorico Romero, Lucas Campos, Sebastián Diaz, Carlos Sanz, Gabriel Brinder, Gastón Vizgarra, Diego Sulca, Alicia Tapia, Roberto Ponce, Sergio Cassinelli, María Zamboni, Andres Flores, Tomás Lienemann, Carmen Carattoni, Cecilia Carattoni, Tito Donoso, Javier Aprile, Carla Carattoni, Cuenca Renan, Luna Federico, Soloza Pedro, Aparicio Cirila, Torres Arnaldo, Torres Mergido, Sardina Ruben, Illesca Francisco, Saravia Adrian, Carabajal Jesus, Alvarado Rene, Saban Mary, Rodriguez Eleuterio, Guzman Durbal, Sajama Sergio, Miranda Dina, Pedro Quispe.
         """)
-
 else:
-
     st.error("No se pudo conectar con la base de datos.")
 	
+
 
 
 
