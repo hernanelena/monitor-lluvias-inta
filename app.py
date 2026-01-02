@@ -79,21 +79,35 @@ if not df.empty:
     todas_f = sorted(df['fecha'].unique(), reverse=True)
     f_hoy = st.sidebar.date_input("Consultar otra fecha:", todas_f[0], format="DD/MM/YYYY")
 
-    # --- CSS DEL TÍTULO CORREGIDO PARA CELULARES ---
+    # --- NUEVO CSS OPTIMIZADO PARA MÓVILES ---
     st.markdown(f"""
         <style>
+            .header-container {{ 
+                display: flex; 
+                align-items: center; 
+                margin-bottom: 15px; 
+                gap: 12px; 
+                width: 100%;
+            }}
             .main-title {{ 
                 font-weight: bold; 
                 color: #1E3A8A !important; 
                 margin: 0; 
-                line-height: 1.1; 
-                /* Se redujo el valor preferido (3.2vw) para que no crezca tanto en pantallas pequeñas */
-                font-size: clamp(14px, 3.2vw, 24px); 
+                line-height: 1.2; 
+                font-size: 24px;
             }}
-            .header-container {{ display: flex; align-items: center; margin-bottom: 15px; gap: 10px; }}
-            /* El logo también se achica más en móvil para dejar espacio al texto */
-            .header-logo {{ height: clamp(25px, 5vw, 45px); }}
+            .header-logo {{ height: 45px; width: auto; }}
             .fecha-label {{ color: #1E3A8A; font-weight: bold; font-size: 15px; margin: 0; }}
+
+            /* Ajustes específicos para pantallas de menos de 600px (Celulares) */
+            @media (max-width: 600px) {{
+                .main-title {{
+                    font-size: 18px !important; /* Forzamos un tamaño pequeño en móvil */
+                }}
+                .header-logo {{
+                    height: 35px;
+                }}
+            }}
         </style>
         <div class="header-container">
             <img src="{logo_url}" class="header-logo">
@@ -208,4 +222,5 @@ if not df.empty:
         Nicolás Uriburu, Nicolás Villegas, Matias Lanusse, Marcela Lopez, Martín Amado, Agustín Sanz Navamuel, Luis Fernández Acevedo, Miguel A. Boasso, Luis Zavaleta, Mario Lambrisca, Noelia Rovedatti, Matías Canonica, Alejo Alvarez, Javier Montes, Guillermo Patron Costa, Sebastián Mendilaharzu, Francisco Chehda, Jorge Robles, Gustavo Soricich, Javier Atea, Luis D. Elias, Leandro Carrizo, Daiana Núñez, Fátima González, Santiago Villalba, Juan Collado, Julio Collado, Estanislao Lara, Carlos Cruz, Daniel Espinoza, Fabian Álvarez, Lucio Señoranis, Rene Vallejos Rueda, Héctor Miranda, Emanuel Arias, Oscar Herrera, Francisca Vacaflor, Zaturnino Ceballos, Alcides Ceballos, Juan Ignacio Pearson, Pascual Erazo, Dario Romero, Luisa Andrada, Alejandro Ricalde, Odorico Romero, Lucas Campos, Sebastián Diaz, Carlos Sanz, Gabriel Brinder, Gastón Vizgarra, Diego Sulca, Alicia Tapia, Roberto Ponce, Sergio Cassinelli, María Zamboni, Andres Flores, Tomás Lienemann, Carmen Carattoni, Cecilia Carattoni, Tito Donoso, Javier Aprile, Carla Carattoni, Cuenca Renan, Luna Federico, Soloza Pedro, Aparicio Cirila, Torres Arnaldo, Torres Mergido, Sardina Ruben, Illesca Francisco, Saravia Adrian, Carabajal Jesus, Alvarado Rene, Saban Mary, Rodriguez Eleuterio, Guzman Durbal, Sajama Sergio, Miranda Dina, Pedro Quispe.
         """)
 else: st.error("Error al conectar con la base de datos.")
+
 
