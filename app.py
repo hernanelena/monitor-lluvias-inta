@@ -23,7 +23,7 @@ except:
 # --- CREDENCIALES ---
 URL_PRECIPITACIONES = "https://territorios.inta.gob.ar/assets/aYqLUVvU3EYiDa7NoJbPKF/submissions/?format=json"
 URL_MAPA = "https://territorios.inta.gob.ar/assets/aFwWKNGXZKppgNYKa33wC8/submissions/?format=json"
-#TOKEN = st.secrets["INTA_TOKEN"]
+TOKEN = st.secrets["INTA_TOKEN"]
 
 HEADERS = {'Authorization': f'Token {TOKEN}'}
 
@@ -213,3 +213,4 @@ if not df.empty:
         """)
 else:
     st.error("Error al conectar con la base de datos.")
+
