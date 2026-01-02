@@ -87,12 +87,18 @@ if not df.empty:
     todas_f = sorted(df['fecha'].unique(), reverse=True)
     f_hoy = st.sidebar.date_input("Consultar otra fecha:", todas_f[0], format="DD/MM/YYYY")
 
+    # --- CSS CORREGIDO PARA MÓVILES ---
     st.markdown(f"""
         <style>
             .main-title {{ font-weight: bold; color: #1E3A8A !important; margin: 0; line-height: 1.1; font-size: 24px; }}
             .header-container {{ display: flex; align-items: center; margin-bottom: 15px; gap: 12px; }}
             .fecha-label {{ color: #1E3A8A; font-weight: bold; font-size: 15px; margin: 0; }}
             .separador {{ color: #CCC; font-weight: normal; }}
+            /* REGLA PARA CELULARES */
+            @media (max-width: 640px) {{ 
+                .main-title {{ font-size: 18px !important; }} 
+                .header-logo {{ height: 35px !important; }} 
+            }}
         </style>
         <div class="header-container">
             <img src="{logo_url}" class="header-logo" style="height: 45px;">
@@ -115,15 +121,13 @@ if not df.empty:
         if not df_dia.empty:
             m = folium.Map(location=[df_dia['lat'].mean(), df_dia['lon'].mean()], zoom_start=7, tiles=None)
             
-            # --- CAPAS BASE ---
             folium.TileLayer(tiles="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", attr='Google', name='Google Satélite', overlay=False).add_to(m)
             folium.TileLayer(tiles="https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png", attr='IGN', name='Argenmap (IGN)', overlay=False).add_to(m)
 
-            # --- MAPA DE CALOR ---
             if ver_calor:
                 calor_data = df_dia[df_dia['mm'] > 0][['lat', 'lon', 'mm']].values.tolist()
                 if calor_data:
-                    # Usamos control=False para que no genere leyendas externas en el mapa
+                    # Sin leyenda con nombre raro (control=False)
                     HeatMap(calor_data, radius=25, blur=18, min_opacity=0.4, control=False).add_to(m)
 
             LocateControl(auto_start=False, fly_to=True).add_to(m)
@@ -133,20 +137,19 @@ if not df.empty:
                 c_hex = '#d32f2f' if r['mm'] > 50 else '#ef6c00' if r['mm'] > 20 else '#1a73e8'
                 c_fol = 'red' if r['mm'] > 50 else 'orange' if r['mm'] > 20 else 'blue'
                 
-                # --- LÓGICA DE ICONOS (Bootstrap Glyphicons - Más seguros) ---
+                # --- ICONOS ---
                 icon_code = 'cloud' 
                 f_raw = r['fen_raw']
                 
                 if 'granizo' in f_raw: 
-                    icon_code = 'asterisk' # Símbolo de estrella/cristal muy visible
+                    icon_code = 'asterisk' 
                 elif 'tormenta' in f_raw: 
-                    icon_code = 'flash'    # Símbolo de rayo en Bootstrap
+                    icon_code = 'flash' 
                 elif 'viento' in f_raw: 
-                    icon_code = 'flag'     # Bandera para indicar viento
+                    icon_code = 'leaf'
                 
                 html_popup = f"""<div style="font-family: sans-serif; min-width: 200px;"><h4 style="margin:0; color:{c_hex}; border-bottom:1px solid #ccc;">{r['Pluviómetro']}</h4><b>{r['mm']} mm</b><br><small>{r['Departamento']}, {r['Provincia']}</small><br><i style="color:gray;">{r['Fenómeno atmosférico']}</i></div>"""
                 
-                # Al no especificar prefix, usa 'glyphicon' por defecto que es lo más estable
                 folium.Marker(
                     [r['lat'], r['lon']], 
                     popup=folium.Popup(html_popup, max_width=300), 
@@ -163,6 +166,7 @@ if not df.empty:
         else: 
             st.warning("No hay datos para la fecha seleccionada.")
 
+    # --- TABS DE DATOS ---
     with t2:
         st.subheader(f"Registros del {f_hoy.strftime('%d/%m/%Y')}")
         df_list = df[df['fecha'] == f_hoy][['Pluviómetro', 'mm', 'Departamento', 'Provincia', 'Fenómeno atmosférico']].sort_values('mm', ascending=False)
@@ -183,7 +187,7 @@ if not df.empty:
             st.dataframe(tabla_mensual.style.format("{:.1f}"), use_container_width=True)
 
     with t4:
-        st.subheader("📈 Histórico")
+        st.subheader("📈 Evolución Temporal")
         estaciones_lista = sorted(df['Pluviómetro'].unique())
         sel_estaciones = st.multiselect("Seleccione Pluviómetros:", estaciones_lista)
         if sel_estaciones:
