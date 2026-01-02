@@ -127,10 +127,19 @@ if not df.empty:
             if ver_calor:
                 calor_data = df_dia[df_dia['mm'] > 0][['lat', 'lon', 'mm']].values.tolist()
                 if calor_data:
-                    # Sin leyenda con nombre raro (control=False)
                     HeatMap(calor_data, radius=25, blur=18, min_opacity=0.4, control=False).add_to(m)
 
-            LocateControl(auto_start=False, fly_to=True).add_to(m)
+            # --- BOTÓN UBICACIÓN EN ESPAÑOL ---
+            LocateControl(
+                auto_start=False, 
+                fly_to=True,
+                strings={
+                    "title": "Mi ubicación",
+                    "popup": "Usted está aquí",
+                    "outsideMapBoundsMsg": "Parece que estás fuera de los límites del mapa"
+                }
+            ).add_to(m)
+
             folium.LayerControl(position='topright', collapsed=True).add_to(m)
             
             for _, r in df_dia.iterrows():
@@ -217,4 +226,3 @@ if not df.empty:
         """)
 else:
     st.error("Error al conectar con la base de datos.")
-
