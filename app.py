@@ -24,6 +24,8 @@ except:
 URL_PRECIPITACIONES = "https://territorios.inta.gob.ar/assets/aYqLUVvU3EYiDa7NoJbPKF/submissions/?format=json"
 URL_MAPA = "https://territorios.inta.gob.ar/assets/aFwWKNGXZKppgNYKa33wC8/submissions/?format=json"
 TOKEN = st.secrets["INTA_TOKEN"]
+
+
 HEADERS = {'Authorization': f'Token {TOKEN}'}
 
 # --- PROCESAMIENTO DE DATOS ---
@@ -77,20 +79,29 @@ if not df.empty:
     todas_f = sorted(df['fecha'].unique(), reverse=True)
     f_hoy = st.sidebar.date_input("Consultar otra fecha:", todas_f[0], format="DD/MM/YYYY")
 
+    # --- CSS DEL TÍTULO CORREGIDO PARA CELULARES ---
     st.markdown(f"""
         <style>
-            .main-title {{ font-weight: bold; color: #1E3A8A !important; margin: 0; line-height: 1.1; font-size: 24px; }}
-            .header-container {{ display: flex; align-items: center; margin-bottom: 15px; gap: 12px; }}
+            .main-title {{ 
+                font-weight: bold; 
+                color: #1E3A8A !important; 
+                margin: 0; 
+                line-height: 1.1; 
+                /* Se redujo el valor preferido (3.2vw) para que no crezca tanto en pantallas pequeñas */
+                font-size: clamp(14px, 3.2vw, 24px); 
+            }}
+            .header-container {{ display: flex; align-items: center; margin-bottom: 15px; gap: 10px; }}
+            /* El logo también se achica más en móvil para dejar espacio al texto */
+            .header-logo {{ height: clamp(25px, 5vw, 45px); }}
             .fecha-label {{ color: #1E3A8A; font-weight: bold; font-size: 15px; margin: 0; }}
         </style>
         <div class="header-container">
-            <img src="{logo_url}" class="header-logo" style="height: 45px;">
+            <img src="{logo_url}" class="header-logo">
             <h1 class="main-title">Red Pluviométrica Salta - Jujuy</h1>
         </div>
     """, unsafe_allow_html=True)
     
-    # --- CORRECCIÓN DE NAVEGACIÓN ---
-    # Usamos una clave para que Streamlit recuerde la pestaña activa
+    # --- TABS ---
     tab_list = ["📍 Mapa", "📊 Listado", "📅 Mensual", "📈 Histórico"]
     t1, t2, t3, t4 = st.tabs(tab_list)
 
@@ -145,8 +156,6 @@ if not df.empty:
     with t4:
         st.subheader("📈 Consulta Histórica")
         estaciones_lista = sorted(df['Pluviómetro'].unique())
-        
-        # Agregamos 'key' única para que no pierda el foco
         sel_estaciones = st.multiselect("Seleccione Pluviómetros:", estaciones_lista, key="ms_pluv_hist")
         
         col_f1, col_f2 = st.columns(2)
@@ -178,7 +187,7 @@ if not df.empty:
                 st.altair_chart(chart)
             else: st.info("No hay datos en el rango seleccionado.")
 
-    # --- INFORMACIÓN INSTITUCIONAL ---
+    # --- INFORMACIÓN INSTITUCIONAL COMPLETA ---
     st.markdown("---")
     with st.expander("ℹ️ Información sobre la Red Pluviométrica"):
         st.write("""
@@ -199,3 +208,4 @@ if not df.empty:
         Nicolás Uriburu, Nicolás Villegas, Matias Lanusse, Marcela Lopez, Martín Amado, Agustín Sanz Navamuel, Luis Fernández Acevedo, Miguel A. Boasso, Luis Zavaleta, Mario Lambrisca, Noelia Rovedatti, Matías Canonica, Alejo Alvarez, Javier Montes, Guillermo Patron Costa, Sebastián Mendilaharzu, Francisco Chehda, Jorge Robles, Gustavo Soricich, Javier Atea, Luis D. Elias, Leandro Carrizo, Daiana Núñez, Fátima González, Santiago Villalba, Juan Collado, Julio Collado, Estanislao Lara, Carlos Cruz, Daniel Espinoza, Fabian Álvarez, Lucio Señoranis, Rene Vallejos Rueda, Héctor Miranda, Emanuel Arias, Oscar Herrera, Francisca Vacaflor, Zaturnino Ceballos, Alcides Ceballos, Juan Ignacio Pearson, Pascual Erazo, Dario Romero, Luisa Andrada, Alejandro Ricalde, Odorico Romero, Lucas Campos, Sebastián Diaz, Carlos Sanz, Gabriel Brinder, Gastón Vizgarra, Diego Sulca, Alicia Tapia, Roberto Ponce, Sergio Cassinelli, María Zamboni, Andres Flores, Tomás Lienemann, Carmen Carattoni, Cecilia Carattoni, Tito Donoso, Javier Aprile, Carla Carattoni, Cuenca Renan, Luna Federico, Soloza Pedro, Aparicio Cirila, Torres Arnaldo, Torres Mergido, Sardina Ruben, Illesca Francisco, Saravia Adrian, Carabajal Jesus, Alvarado Rene, Saban Mary, Rodriguez Eleuterio, Guzman Durbal, Sajama Sergio, Miranda Dina, Pedro Quispe.
         """)
 else: st.error("Error al conectar con la base de datos.")
+
