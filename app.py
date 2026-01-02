@@ -79,7 +79,7 @@ if not df.empty:
     todas_f = sorted(df['fecha'].unique(), reverse=True)
     f_hoy = st.sidebar.date_input("Consultar otra fecha:", todas_f[0], format="DD/MM/YYYY")
 
-    # --- NUEVO CSS OPTIMIZADO PARA MÓVILES ---
+    # --- CSS OPTIMIZADO PARA MÓVILES ---
     st.markdown(f"""
         <style>
             .header-container {{ 
@@ -99,10 +99,9 @@ if not df.empty:
             .header-logo {{ height: 45px; width: auto; }}
             .fecha-label {{ color: #1E3A8A; font-weight: bold; font-size: 15px; margin: 0; }}
 
-            /* Ajustes específicos para pantallas de menos de 600px (Celulares) */
             @media (max-width: 600px) {{
                 .main-title {{
-                    font-size: 18px !important; /* Forzamos un tamaño pequeño en móvil */
+                    font-size: 18px !important; 
                 }}
                 .header-logo {{
                     height: 35px;
@@ -143,7 +142,21 @@ if not df.empty:
                 if 'granizo' in r['fen_raw']: icon_code = 'asterisk' 
                 elif 'tormenta' in r['fen_raw']: icon_code = 'flash' 
                 elif 'viento' in r['fen_raw']: icon_code = 'leaf'
-                html_popup = f"""<div style="font-family: sans-serif; min-width: 200px;"><h4 style="margin:0; color:{c_hex}; border-bottom:1px solid #ccc;">{r['Pluviómetro']}</h4><b>{r['mm']} mm</b><br><small>{r['Departamento']}, {r['Provincia']}</small></div>"""
+                
+                # --- POPUP CON CABECERA MÁS GRANDE Y EN NEGRITA ---
+                html_popup = f"""
+                <div style="font-family: sans-serif; min-width: 200px;">
+                    <div style="margin:0; color:{c_hex}; border-bottom:2px solid {c_hex}; font-size:18px; font-weight:bold; padding-bottom:5px; margin-bottom:8px;">
+                        {r['Pluviómetro']}
+                    </div>
+                    <div style="font-size:15px; margin-bottom:3px;"><b>Lluvia:</b> {r['mm']} mm</div>
+                    <div style="font-size:14px; margin-bottom:6px;"><b>Fenómeno:</b> {r['Fenómeno atmosférico']}</div>
+                    <div style="font-size:13px; color:#333; border-top:1px solid #eee; padding-top:5px;">
+                        <b>{r['Departamento']}, {r['Provincia']}</b>
+                    </div>
+                </div>
+                """
+                
                 folium.Marker([r['lat'], r['lon']], popup=folium.Popup(html_popup, max_width=300), icon=folium.Icon(color=c_fol, icon=icon_code)).add_to(m)
                 folium.map.Marker([r['lat'], r['lon']], icon=folium.DivIcon(icon_size=(40,20), icon_anchor=(20,-10), html=f'<div style="color:{c_hex}; font-weight:900; font-size:11pt; text-shadow:1px 1px 0 #fff;">{int(r["mm"])}</div>')).add_to(m)
             st_folium(m, width=None, height=500, key="mapa_v_final")
@@ -222,5 +235,6 @@ if not df.empty:
         Nicolás Uriburu, Nicolás Villegas, Matias Lanusse, Marcela Lopez, Martín Amado, Agustín Sanz Navamuel, Luis Fernández Acevedo, Miguel A. Boasso, Luis Zavaleta, Mario Lambrisca, Noelia Rovedatti, Matías Canonica, Alejo Alvarez, Javier Montes, Guillermo Patron Costa, Sebastián Mendilaharzu, Francisco Chehda, Jorge Robles, Gustavo Soricich, Javier Atea, Luis D. Elias, Leandro Carrizo, Daiana Núñez, Fátima González, Santiago Villalba, Juan Collado, Julio Collado, Estanislao Lara, Carlos Cruz, Daniel Espinoza, Fabian Álvarez, Lucio Señoranis, Rene Vallejos Rueda, Héctor Miranda, Emanuel Arias, Oscar Herrera, Francisca Vacaflor, Zaturnino Ceballos, Alcides Ceballos, Juan Ignacio Pearson, Pascual Erazo, Dario Romero, Luisa Andrada, Alejandro Ricalde, Odorico Romero, Lucas Campos, Sebastián Diaz, Carlos Sanz, Gabriel Brinder, Gastón Vizgarra, Diego Sulca, Alicia Tapia, Roberto Ponce, Sergio Cassinelli, María Zamboni, Andres Flores, Tomás Lienemann, Carmen Carattoni, Cecilia Carattoni, Tito Donoso, Javier Aprile, Carla Carattoni, Cuenca Renan, Luna Federico, Soloza Pedro, Aparicio Cirila, Torres Arnaldo, Torres Mergido, Sardina Ruben, Illesca Francisco, Saravia Adrian, Carabajal Jesus, Alvarado Rene, Saban Mary, Rodriguez Eleuterio, Guzman Durbal, Sajama Sergio, Miranda Dina, Pedro Quispe.
         """)
 else: st.error("Error al conectar con la base de datos.")
+
 
 
