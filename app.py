@@ -24,8 +24,6 @@ except:
 URL_PRECIPITACIONES = "https://territorios.inta.gob.ar/assets/aYqLUVvU3EYiDa7NoJbPKF/submissions/?format=json"
 URL_MAPA = "https://territorios.inta.gob.ar/assets/aFwWKNGXZKppgNYKa33wC8/submissions/?format=json"
 TOKEN = st.secrets["INTA_TOKEN"]
-
-
 HEADERS = {'Authorization': f'Token {TOKEN}'}
 
 # --- PROCESAMIENTO DE DATOS ---
@@ -79,33 +77,26 @@ if not df.empty:
     todas_f = sorted(df['fecha'].unique(), reverse=True)
     f_hoy = st.sidebar.date_input("Consultar otra fecha:", todas_f[0], format="DD/MM/YYYY")
 
-    # --- CSS OPTIMIZADO PARA MÓVILES ---
+    # --- CSS OPTIMIZADO PARA MÓVILES Y SCROLL ---
     st.markdown(f"""
         <style>
-            .header-container {{ 
-                display: flex; 
-                align-items: center; 
-                margin-bottom: 15px; 
-                gap: 12px; 
-                width: 100%;
-            }}
-            .main-title {{ 
-                font-weight: bold; 
-                color: #1E3A8A !important; 
-                margin: 0; 
-                line-height: 1.2; 
-                font-size: 24px;
-            }}
+            .header-container {{ display: flex; align-items: center; margin-bottom: 15px; gap: 12px; width: 100%; }}
+            .main-title {{ font-weight: bold; color: #1E3A8A !important; margin: 0; line-height: 1.2; font-size: 24px; }}
             .header-logo {{ height: 45px; width: auto; }}
             .fecha-label {{ color: #1E3A8A; font-weight: bold; font-size: 15px; margin: 0; }}
+            
+            .scroll-container {{
+                width: 100%;
+                overflow-x: auto !important;
+                white-space: nowrap;
+                padding-bottom: 20px;
+                border: 1px solid #f0f2f6;
+                border-radius: 5px;
+            }}
 
             @media (max-width: 600px) {{
-                .main-title {{
-                    font-size: 18px !important; 
-                }}
-                .header-logo {{
-                    height: 35px;
-                }}
+                .main-title {{ font-size: 18px !important; }}
+                .header-logo {{ height: 35px; }}
             }}
         </style>
         <div class="header-container">
@@ -114,7 +105,6 @@ if not df.empty:
         </div>
     """, unsafe_allow_html=True)
     
-    # --- TABS ---
     tab_list = ["📍 Mapa", "📊 Listado", "📅 Mensual", "📈 Histórico"]
     t1, t2, t3, t4 = st.tabs(tab_list)
 
@@ -122,9 +112,10 @@ if not df.empty:
         fecha_f = f_hoy.strftime('%d/%m/%Y')
         col_ctrl1, col_ctrl2 = st.columns([0.55, 0.45])
         with col_ctrl1:
-            st.markdown(f'<p class="fecha-label">Lluvias del {fecha_f} <span class="separador">|</span></p>', unsafe_allow_html=True)
+            st.markdown(f'<p class="fecha-label">Lluvias del {fecha_f}</p>', unsafe_allow_html=True)
         with col_ctrl2:
             ver_calor = st.checkbox("🔥 Activar Mapa de Calor", value=False)
+        
         df_dia = df[df['fecha'] == f_hoy].dropna(subset=['lat', 'lon'])
         if not df_dia.empty:
             m = folium.Map(location=[df_dia['lat'].mean(), df_dia['lon'].mean()], zoom_start=7, tiles=None)
@@ -133,8 +124,9 @@ if not df.empty:
             if ver_calor:
                 calor_data = df_dia[df_dia['mm'] > 0][['lat', 'lon', 'mm']].values.tolist()
                 if calor_data: HeatMap(calor_data, radius=25, blur=18, min_opacity=0.4, control=False).add_to(m)
-            LocateControl(auto_start=False, fly_to=True, strings={"title": "Mi ubicación", "popup": "Usted está aquí"}).add_to(m)
+            LocateControl(auto_start=False, fly_to=True).add_to(m)
             folium.LayerControl(position='topright', collapsed=True).add_to(m)
+            
             for _, r in df_dia.iterrows():
                 c_hex = '#d32f2f' if r['mm'] > 50 else '#ef6c00' if r['mm'] > 20 else '#1a73e8'
                 c_fol = 'red' if r['mm'] > 50 else 'orange' if r['mm'] > 20 else 'blue'
@@ -143,7 +135,6 @@ if not df.empty:
                 elif 'tormenta' in r['fen_raw']: icon_code = 'flash' 
                 elif 'viento' in r['fen_raw']: icon_code = 'leaf'
                 
-                # --- POPUP CON CABECERA MÁS GRANDE Y EN NEGRITA ---
                 html_popup = f"""
                 <div style="font-family: sans-serif; min-width: 200px;">
                     <div style="margin:0; color:{c_hex}; border-bottom:2px solid {c_hex}; font-size:18px; font-weight:bold; padding-bottom:5px; margin-bottom:8px;">
@@ -156,7 +147,6 @@ if not df.empty:
                     </div>
                 </div>
                 """
-                
                 folium.Marker([r['lat'], r['lon']], popup=folium.Popup(html_popup, max_width=300), icon=folium.Icon(color=c_fol, icon=icon_code)).add_to(m)
                 folium.map.Marker([r['lat'], r['lon']], icon=folium.DivIcon(icon_size=(40,20), icon_anchor=(20,-10), html=f'<div style="color:{c_hex}; font-weight:900; font-size:11pt; text-shadow:1px 1px 0 #fff;">{int(r["mm"])}</div>')).add_to(m)
             st_folium(m, width=None, height=500, key="mapa_v_final")
@@ -183,8 +173,12 @@ if not df.empty:
     with t4:
         st.subheader("📈 Consulta Histórica")
         estaciones_lista = sorted(df['Pluviómetro'].unique())
-        sel_estaciones = st.multiselect("Seleccione Pluviómetros:", estaciones_lista, key="ms_pluv_hist")
-        
+        col_h1, col_h2 = st.columns([0.6, 0.4])
+        with col_h1:
+            sel_estaciones = st.multiselect("Seleccione Pluviómetros:", estaciones_lista, key="ms_pluv_hist")
+        with col_h2:
+            agrupacion = st.radio("Agrupar datos por:", ["Día", "Semana", "Mes"], horizontal=True)
+
         col_f1, col_f2 = st.columns(2)
         fecha_min, fecha_max = df['fecha'].min(), df['fecha'].max()
         with col_f1: f_inicio = st.date_input("Fecha desde:", fecha_min, key="f_desde_hist")
@@ -193,32 +187,38 @@ if not df.empty:
         if sel_estaciones and f_inicio <= f_fin:
             df_hist = df[(df['Pluviómetro'].isin(sel_estaciones)) & (df['fecha'] >= f_inicio) & (df['fecha'] <= f_fin)].copy()
             if not df_hist.empty:
-                df_hist['fecha_f'] = df_hist['fecha_dt'].dt.strftime('%d/%m/%Y')
-                df_hist = df_hist.sort_values('fecha_dt')
-                csv = df_hist[['fecha', 'Pluviómetro', 'mm', 'Departamento', 'Provincia', 'Fenómeno atmosférico']].to_csv(index=False).encode('utf-8')
-                st.download_button(label="📥 Descargar datos (CSV)", data=csv, file_name='historico_lluvias.csv', mime='text/csv')
+                if agrupacion == "Semana":
+                    df_hist['fecha_dt'] = df_hist['fecha_dt'] - pd.to_timedelta(df_hist['fecha_dt'].dt.dayofweek, unit='d')
+                elif agrupacion == "Mes":
+                    df_hist['fecha_dt'] = df_hist['fecha_dt'].dt.to_period('M').dt.to_timestamp()
                 
-                chart = alt.Chart(df_hist).mark_bar().encode(
+                df_plot = df_hist.groupby(['fecha_dt', 'Pluviómetro']).agg({'mm': 'sum'}).reset_index()
+                df_plot['fecha_f'] = df_plot['fecha_dt'].dt.strftime('%d/%m/%Y')
+                df_plot = df_plot.sort_values('fecha_dt')
+
+                st.markdown('<div class="scroll-container">', unsafe_allow_html=True)
+                chart = alt.Chart(df_plot).mark_bar().encode(
                     x=alt.X('Pluviómetro:N', title=None, axis=alt.Axis(labels=False, ticks=False)),
-                    y=alt.Y('mm:Q', title='Lluvia (mm)'),
-                    color=alt.Color('Pluviómetro:N', legend=alt.Legend(orient='bottom', title="Pluviómetros Seleccionados")),
-                    column=alt.Column('fecha_f:O', 
-                                     title=None, 
-                                     header=alt.Header(labelOrient='bottom', 
-                                                       labelAngle=-45, 
-                                                       labelAlign='right',
-                                                       labelPadding=15)),
+                    y=alt.Y('mm:Q', title='Lluvia Acumulada (mm)'),
+                    color=alt.Color('Pluviómetro:N', legend=alt.Legend(orient='bottom', title="Pluviómetros")),
+                    column=alt.Column('fecha_f:O', title=None, 
+                                     sort=alt.EncodingSortField(field="fecha_dt", order="ascending"),
+                                     header=alt.Header(labelOrient='bottom', labelAngle=-45, labelAlign='right', labelPadding=15)),
                     tooltip=['fecha_f', 'Pluviómetro', 'mm']
-                ).configure_view(stroke=None).properties(width=alt.Step(30), height=380)
+                ).configure_view(stroke=None).properties(width=alt.Step(45), height=400)
                 
-                st.altair_chart(chart)
+                st.altair_chart(chart, use_container_width=False)
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                csv = df_plot.to_csv(index=False).encode('utf-8')
+                st.download_button(label="📥 Descargar datos (CSV)", data=csv, file_name='historico_lluvias.csv', mime='text/csv')
             else: st.info("No hay datos en el rango seleccionado.")
 
-    # --- INFORMACIÓN INSTITUCIONAL COMPLETA ---
+    # --- INFORMACIÓN INSTITUCIONAL ---
     st.markdown("---")
     with st.expander("ℹ️ Información sobre la Red Pluviométrica"):
-        st.write("""
-        La Red Pluviométrica es una herramienta tecnológica desarrollada por el INTA Centro Regional Salta y Jujuy, cuyo objetivo es recopilar datos precisos y confiables sobre la precipitación en diversas áreas geográficas. Estos datos son esenciales no solo para la gestión agrícola, sino también para la toma de decisiones de otros actores, como los gobiernos locales, que pueden utilizarlos para la planificación y gestión de recursos hídricos, la prevención de desastres naturales y el desarrollo sostenible en sus comunidades.
+        st.markdown("""
+         La Red Pluviométrica es una herramienta tecnológica desarrollada por el INTA Centro Regional Salta y Jujuy, cuyo objetivo es recopilar datos precisos y confiables sobre la precipitación en diversas áreas geográficas. Estos datos son esenciales no solo para la gestión agrícola, sino también para la toma de decisiones de otros actores, como los gobiernos locales, que pueden utilizarlos para la planificación y gestión de recursos hídricos, la prevención de desastres naturales y el desarrollo sostenible en sus comunidades.
         
         La Red Pluviométrica es una iniciativa que reúne el trabajo articulado y mancomunado entre INTA, productores locales y particulares que colaboran diariamente con la información registrada por sus pluviómetros.
         
@@ -234,7 +234,5 @@ if not df.empty:
         **Colaboradores:**
         Nicolás Uriburu, Nicolás Villegas, Matias Lanusse, Marcela Lopez, Martín Amado, Agustín Sanz Navamuel, Luis Fernández Acevedo, Miguel A. Boasso, Luis Zavaleta, Mario Lambrisca, Noelia Rovedatti, Matías Canonica, Alejo Alvarez, Javier Montes, Guillermo Patron Costa, Sebastián Mendilaharzu, Francisco Chehda, Jorge Robles, Gustavo Soricich, Javier Atea, Luis D. Elias, Leandro Carrizo, Daiana Núñez, Fátima González, Santiago Villalba, Juan Collado, Julio Collado, Estanislao Lara, Carlos Cruz, Daniel Espinoza, Fabian Álvarez, Lucio Señoranis, Rene Vallejos Rueda, Héctor Miranda, Emanuel Arias, Oscar Herrera, Francisca Vacaflor, Zaturnino Ceballos, Alcides Ceballos, Juan Ignacio Pearson, Pascual Erazo, Dario Romero, Luisa Andrada, Alejandro Ricalde, Odorico Romero, Lucas Campos, Sebastián Diaz, Carlos Sanz, Gabriel Brinder, Gastón Vizgarra, Diego Sulca, Alicia Tapia, Roberto Ponce, Sergio Cassinelli, María Zamboni, Andres Flores, Tomás Lienemann, Carmen Carattoni, Cecilia Carattoni, Tito Donoso, Javier Aprile, Carla Carattoni, Cuenca Renan, Luna Federico, Soloza Pedro, Aparicio Cirila, Torres Arnaldo, Torres Mergido, Sardina Ruben, Illesca Francisco, Saravia Adrian, Carabajal Jesus, Alvarado Rene, Saban Mary, Rodriguez Eleuterio, Guzman Durbal, Sajama Sergio, Miranda Dina, Pedro Quispe.
         """)
-else: st.error("Error al conectar con la base de datos.")
-
-
-
+else: 
+    st.error("Error al conectar con la base de datos.")
