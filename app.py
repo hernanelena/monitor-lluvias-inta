@@ -7,6 +7,7 @@ from streamlit_folium import st_folium
 from folium.plugins import LocateControl
 import locale
 import altair as alt
+from datetime import timedelta
 
 # 1. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(
@@ -367,4 +368,5 @@ if not df.empty:
         """)
 else: 
     st.error("Error al conectar con la base de datos.")
+
 
