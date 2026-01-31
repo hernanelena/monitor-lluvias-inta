@@ -115,6 +115,9 @@ if not df.empty:
     t1, t2, t3, t4, t5, t6 = st.tabs(tab_list)
 
     with t1:
+        st.subheader(f"Lluvia del {f_hoy.strftime('%d/%m/%Y')}")
+        st.info(f"Lluvia acumulada desde las 9 hs del {f_hoy.strftime('%d/%m/%Y')} a las 9 hs del día {(f_hoy + timedelta(days=1)).strftime('%d/%m/%Y')} - Día pluviométrico")
+
         # 1. Filtro de región ocupando menos espacio
         lista_regiones = ["Todas"] + sorted(df_dia['Region'].unique().tolist()) if not df_dia.empty else ["Todas"]
         sel_zoom = st.selectbox("🔍 Enfocar Región:", lista_regiones)
@@ -364,3 +367,4 @@ if not df.empty:
         """)
 else: 
     st.error("Error al conectar con la base de datos.")
+
