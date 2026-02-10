@@ -236,14 +236,14 @@ if not df.empty:
             
             with col_r1:
                 # Reutilizamos el año seleccionado en la pestaña 3 o creamos uno nuevo
-                sel_anio_r = st.selectbox("Año del récord:", sorted(df['Año'].unique(), reverse=True), key="anio_r")
+                sel_anio_r = st.selectbox("Año:", sorted(df['Año'].unique(), reverse=True), key="anio_r")
             
             with col_r2:
                 meses_n = {1:'Enero', 2:'Febrero', 3:'Marzo', 4:'Abril', 5:'Mayo', 6:'Junio', 
                            7:'Julio', 8:'Agosto', 9:'Septiembre', 10:'Octubre', 11:'Noviembre', 12:'Diciembre'}
                 # Filtramos meses que tengan datos para ese año
                 meses_disp = sorted(df[df['Año'] == sel_anio_r]['Mes_Num'].unique())
-                sel_mes_r = st.selectbox("Mes del récord:", meses_disp, format_func=lambda x: meses_n[x], key="mes_r")
+                sel_mes_r = st.selectbox("Mes:", meses_disp, format_func=lambda x: meses_n[x], key="mes_r")
                 
             with col_r3:
                 sel_est_r = st.selectbox("Seleccionar Pluviómetro:", sorted(df['Pluviómetro'].unique()), key="est_r")
@@ -435,6 +435,7 @@ if not df.empty:
         """,unsafe_allow_html=True)
 else: 
     st.error("Error al conectar con la base de datos.")
+
 
 
 
