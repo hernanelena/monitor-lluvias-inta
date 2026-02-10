@@ -267,7 +267,7 @@ if not df.empty:
                 with m1:
                     st.metric(label="Máxima Precipitación", value=f"{max_row['mm']} mm")
                     st.caption(f"📅 Fecha: {max_row['fecha'].strftime('%d/%m/%Y')}")
-                    st.write(f"**Fenómeno:** {max_row['Fenómeno atmosférico']}")
+                   
 
                 with m2:
                     if not df_con_lluvia.empty:
@@ -435,6 +435,7 @@ if not df.empty:
         """,unsafe_allow_html=True)
 else: 
     st.error("Error al conectar con la base de datos.")
+
 
 
 
