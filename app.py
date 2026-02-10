@@ -25,6 +25,8 @@ except:
 URL_PRECIPITACIONES = "https://territorios.inta.gob.ar/assets/aYqLUVvU3EYiDa7NoJbPKF/submissions/?format=json"
 URL_MAPA = "https://territorios.inta.gob.ar/assets/aFwWKNGXZKppgNYKa33wC8/submissions/?format=json"
 TOKEN = st.secrets["INTA_TOKEN"]
+
+
 HEADERS = {'Authorization': f'Token {TOKEN}'}
 
 # --- PROCESAMIENTO DE DATOS ---
@@ -112,8 +114,8 @@ if not df.empty:
     df_dia = df[df['fecha'] == f_hoy].dropna(subset=['lat', 'lon'])
     
     # --- PESTAÑAS ---
-    tab_list = ["🗺️ Mapa", "📊 Día", "📅 Mes", "📈 Hist.", "📥 Desc.", "🌧️ Red"]
-    t1, t2, t3, t4, t5, t6 = st.tabs(tab_list)
+    tab_list = ["🗺️ Mapa", "📊 Día", "📅 Mes","🏆 Max Min", "📈 Hist.", "📥 Desc.", "🌧️ Red"]
+    t1, t2, t3, t4, t5, t6, t7 = st.tabs(tab_list)
 
     with t1:
         st.subheader(f"Lluvia del {f_hoy.strftime('%d/%m/%Y')}")
@@ -226,8 +228,70 @@ if not df.empty:
             tabla.columns = [meses_n[c] for c in tabla.columns]
             tabla['TOTAL'] = tabla.sum(axis=1)
             st.dataframe(tabla.style.format("{:.1f}").highlight_max(axis=1, props='background-color: #e3f2fd;'), use_container_width=True)
-
     with t4:
+            st.subheader("🏆 Máximos y Mínimos Mensuales")
+            st.info("Seleccioná un pluviómetro y un período para conocer los extremos registrados.")
+
+            col_r1, col_r2, col_r3 = st.columns(3)
+            
+            with col_r1:
+                # Reutilizamos el año seleccionado en la pestaña 3 o creamos uno nuevo
+                sel_anio_r = st.selectbox("Año del récord:", sorted(df['Año'].unique(), reverse=True), key="anio_r")
+            
+            with col_r2:
+                meses_n = {1:'Enero', 2:'Febrero', 3:'Marzo', 4:'Abril', 5:'Mayo', 6:'Junio', 
+                           7:'Julio', 8:'Agosto', 9:'Septiembre', 10:'Octubre', 11:'Noviembre', 12:'Diciembre'}
+                # Filtramos meses que tengan datos para ese año
+                meses_disp = sorted(df[df['Año'] == sel_anio_r]['Mes_Num'].unique())
+                sel_mes_r = st.selectbox("Mes del récord:", meses_disp, format_func=lambda x: meses_n[x], key="mes_r")
+                
+            with col_r3:
+                sel_est_r = st.selectbox("Seleccionar Pluviómetro:", sorted(df['Pluviómetro'].unique()), key="est_r")
+
+            # Filtrado de datos para el cálculo
+            df_records = df[(df['Año'] == sel_anio_r) & 
+                            (df['Mes_Num'] == sel_mes_r) & 
+                            (df['Pluviómetro'] == sel_est_r)].copy()
+
+            if not df_records.empty:
+                # --- CÁLCULOS ---
+                # Máxima absoluta
+                max_row = df_records.loc[df_records['mm'].idxmax()]
+                
+                # Mínima (Consideramos solo días donde llovió > 0 para que no siempre sea 0)
+                df_con_lluvia = df_records[df_records['mm'] > 0]
+                
+                # Layout de métricas
+                m1, m2 = st.columns(2)
+                
+                with m1:
+                    st.metric(label="Máxima Precipitación", value=f"{max_row['mm']} mm")
+                    st.caption(f"📅 Fecha: {max_row['fecha'].strftime('%d/%m/%Y')}")
+                    st.write(f"**Fenómeno:** {max_row['Fenómeno atmosférico']}")
+
+                with m2:
+                    if not df_con_lluvia.empty:
+                        min_row = df_con_lluvia.loc[df_con_lluvia['mm'].idxmin()]
+                        st.metric(label="Mínima (Día con lluvia)", value=f"{min_row['mm']} mm")
+                        st.caption(f"📅 Fecha: {min_row['fecha'].strftime('%d/%m/%Y')}")
+                    else:
+                        st.metric(label="Mínima", value="0 mm")
+                        st.caption("No se registraron lluvias en el período.")
+
+                # Gráfico auxiliar rápido para contexto
+                st.markdown("---")
+                st.write(f"**Comportamiento diario en {meses_n[sel_mes_r]} {sel_anio_r}:**")
+                chart_r = alt.Chart(df_records).mark_line(point=True, color='#1E3A8A').encode(
+                    x=alt.X('fecha:T', title='Día'),
+                    y=alt.Y('mm:Q', title='Precipitación (mm)'),
+                    tooltip=['fecha', 'mm']
+                ).properties(height=200)
+                st.altair_chart(chart_r, use_container_width=True)
+                
+            else:
+                st.warning("No hay datos registrados para los filtros seleccionados.")
+
+    with t5:
         st.subheader("📈 Consulta Histórica")
         col_f1, col_f2, col_f3 = st.columns([0.3, 0.4, 0.3])
         with col_f1:
@@ -260,7 +324,7 @@ if not df.empty:
             ).properties(width=alt.Step(45), height=350)
             st.altair_chart(chart)
 
-    with t5:
+    with t6:
         st.subheader("📥 Descargar")
         sel_est_desc = st.selectbox("Seleccione el Pluviómetro:", sorted(df['Pluviómetro'].unique()))
         if sel_est_desc:
@@ -268,7 +332,7 @@ if not df.empty:
             st.dataframe(df_desc, use_container_width=True, hide_index=True)
             st.download_button(f"📥 Descargar CSV de {sel_est_desc}", df_desc.to_csv(index=False).encode('utf-8'), f'{sel_est_desc}.csv', "text/csv")
 
-    with t6:
+    with t7:
         st.subheader("Red")
         st.info("Este mapa muestra todos los pluviómetros incorporados a la red, independientemente de si han reportado datos en la fecha seleccionada.")
         
@@ -371,6 +435,10 @@ if not df.empty:
         """,unsafe_allow_html=True)
 else: 
     st.error("Error al conectar con la base de datos.")
+
+
+
+
 
 
 
