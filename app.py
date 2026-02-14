@@ -196,7 +196,8 @@ if not df.empty:
                 ).add_to(m)
             # AQUÍ MODIFICAR:
             st.markdown('<div class="map-border">', unsafe_allow_html=True)
-            st_folium(m, width=None, height=550, use_container_width=True, key=f"mapa_{sel_zoom}")
+            # st_folium(m, width=None, height=550, use_container_width=True, key=f"mapa_{sel_zoom}")
+            st_folium(m, width='stretch', height=550, key=f"mapa_{sel_zoom}")
             st.markdown('</div>', unsafe_allow_html=True)
         else: 
             st.warning("No hay datos para la fecha seleccionada.")
@@ -403,7 +404,8 @@ if not df.empty:
             # Renderizado del mapa
             # AQUÍ MODIFICAR:
             st.markdown('<div class="map-border">', unsafe_allow_html=True)
-            st_folium(m_red, width=None, height=600, use_container_width=True, key=f"mapa_red_full_{seleccion}")
+            # st_folium(m_red, width=None, height=600, use_container_width=True, key=f"mapa_red_full_{seleccion}")
+            st_folium(m_red, width='stretch', height=600, key=f"mapa_red_full_{seleccion}")
             st.markdown('</div>', unsafe_allow_html=True)
             
             st.write(f"**Total de estaciones en vista:** {len(df_mostrar)}")
@@ -436,6 +438,7 @@ if not df.empty:
         """,unsafe_allow_html=True)
 else: 
     st.error("Error al conectar con la base de datos.")
+
 
 
 
