@@ -44,19 +44,9 @@ def extraer_coordenadas(row):
 @st.cache_data(ttl=1800)
 def cargar_datos_completos():
     try:
-        # 1. DESCARGA CON TIEMPO LÍMITE
-        r1 = requests.get(URL_PRECIPITACIONES, headers=HEADERS, timeout=30)
-        r2 = requests.get(URL_MAPA, headers=HEADERS, timeout=30)
-        
-       
-        
-        # 3. CONVERSIÓN A DATAFRAME
-        df_p = pd.DataFrame(r1.json())
-        df_c = pd.DataFrame(r2.json())
-
-        
-        # r1, r2 = requests.get(URL_PRECIPITACIONES, headers=HEADERS), requests.get(URL_MAPA, headers=HEADERS)
-        # df_p, df_c = pd.DataFrame(r1.json()), pd.DataFrame(r2.json())
+               
+        r1, r2 = requests.get(URL_PRECIPITACIONES, headers=HEADERS), requests.get(URL_MAPA, headers=HEADERS)
+        df_p, df_c = pd.DataFrame(r1.json()), pd.DataFrame(r2.json())
         df_p['cod'] = df_p['Pluviometros'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
         df_c['cod'] = df_c['Codigo_txt_del_pluviometro'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
         df_p['fecha_dt'] = pd.to_datetime(df_p['Fecha_del_dato'])
@@ -446,6 +436,7 @@ if not df.empty:
         """,unsafe_allow_html=True)
 else: 
     st.error("Error al conectar con la base de datos.")
+
 
 
 
