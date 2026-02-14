@@ -45,12 +45,10 @@ def extraer_coordenadas(row):
 def cargar_datos_completos():
     try:
         # 1. DESCARGA CON TIEMPO LÍMITE
-        r1 = requests.get(URL_PRECIPITACIONES, headers=HEADERS, timeout=15)
-        r2 = requests.get(URL_MAPA, headers=HEADERS, timeout=15)
+        r1 = requests.get(URL_PRECIPITACIONES, headers=HEADERS, timeout=30)
+        r2 = requests.get(URL_MAPA, headers=HEADERS, timeout=30)
         
-        # 2. VERIFICACIÓN (Si el servidor tiró error 500 o 404, salta al except)
-        r1.raise_for_status() 
-        r2.raise_for_status()
+       
         
         # 3. CONVERSIÓN A DATAFRAME
         df_p = pd.DataFrame(r1.json())
@@ -448,6 +446,7 @@ if not df.empty:
         """,unsafe_allow_html=True)
 else: 
     st.error("Error al conectar con la base de datos.")
+
 
 
 
