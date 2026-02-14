@@ -41,7 +41,7 @@ def extraer_coordenadas(row):
     except: return None, None
     return None, None
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=1800)
 def cargar_datos_completos():
     try:
         r1, r2 = requests.get(URL_PRECIPITACIONES, headers=HEADERS), requests.get(URL_MAPA, headers=HEADERS)
@@ -435,6 +435,7 @@ if not df.empty:
         """,unsafe_allow_html=True)
 else: 
     st.error("Error al conectar con la base de datos.")
+
 
 
 
