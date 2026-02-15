@@ -3,4 +3,5 @@ pandas
 requests
 numpy
 folium
+fpdf2
 streamlit-folium
