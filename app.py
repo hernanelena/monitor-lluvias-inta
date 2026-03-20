@@ -425,12 +425,28 @@ if not df.empty:
                     <div style="font-size:12px; color:#333; border-top:1px solid #eee; padding-top:5px;"><b>{r['Departamento']}, {r['Provincia']}</b></div>
                 </div>
                 """
+                # 🔵 Leyenda de mm sobre el marcador (número grande)
+                folium.map.Marker(
+                    [r['lat'], r['lon']],
+                    icon=folium.DivIcon(
+                        icon_size=(40, 20),
+                        icon_anchor=(20, -10),
+                        html=f'''
+                            <div style="
+                                color:{c_hex};
+                                font-weight:900;
+                                font-size:11pt;
+                                text-shadow:1px 1px 0 #fff;
+                            ">{int(r["mm"])}</div>
+                        '''
+                    )
+                ).add_to(m)
 
                 folium.Marker(
                     [r['lat'], r['lon']],
                     popup=folium.Popup(html_popup, max_width=250),
                     icon=folium.Icon(color=c_fol, icon=icon_code),
-                    tooltip=f"{int(r['mm'])} mm"
+                    
                 ).add_to(m)
 
             st.markdown('<div class="map-border">', unsafe_allow_html=True)
