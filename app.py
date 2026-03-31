@@ -1651,7 +1651,16 @@ elif seccion == "🌧️ Red":
     ).add_to(m_red)
 
     # Cluster de marcadores (mejor performance)
-    cluster = MarkerCluster().add_to(m_red)
+    
+    #cluster = MarkerCluster().add_to(m_red)
+    pluvios = folium.FeatureGroup(
+        name="Pluviómetros",
+        overlay=False,   # 👈 CLAVE: no aparece en el control
+        control=False
+    )
+
+    cluster = MarkerCluster().add_to(pluvios)
+    m_red.add_child(pluvios)
 
     # ============================
     # POPUPS (Pluviómetro / Depto / Prov.)
