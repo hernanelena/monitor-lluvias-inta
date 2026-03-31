@@ -5,3 +5,4 @@ numpy
 folium
 fpdf2
 streamlit-folium
+openpyxl
