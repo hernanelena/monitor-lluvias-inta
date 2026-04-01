@@ -48,20 +48,20 @@ interactivos**, que permiten la consulta de precipitaciones **diarias y
 mensuales** desde octubre de 2024 a la fecha.
 
 ### 👥 Equipo de trabajo
-Lic. Inf. Hernán Elena (Lab. Teledetección y SIG - Grupo RRNN)
-Obs. Met. Germán Guanca (Meteorología - Grupo RRNN)
-Ing. Agr. Rafael Saldaño (OIT Coronel Moldes)
-Ing. Agr. Daniela Moneta (AER Valle de Lerma)
-Ing. Juan Ramón Rojas (INTA-AER Santa Victoria Este)
-Ing. Agr. Daniel Lamberti (INTA AER Perico)
-Tec. Recursos Hídricos Fátima del Valle Miranda (INTA AER Palma Sola)
-Ing. Agr. Florencia Diaz (INTA AER Palma Sola)
-Ing. Agr. Héctor Diaz (INTA AER J.V. Gonzalez)
-Ing. Agr. Carlos G. Cabrera (INTA AER J.V. Gonzalez)
-Lucas Diaz (INTA AER Cafayate - OIT San Carlos)
-Med. Vet. Cristina Rosetto (INTA EECT Yuto)
-Ing. RRNN Fabian Tejerina (Grupo RRNN EEA Salta)
-Tec. Agr. Carlos Arias (OIT General Güemes)
+Lic. Inf. **Hernán Elena** (EEA Salta)  
+Obs. Met. **Germán Guanca** (EEA Salta)     
+Ing. Agr. **Rafael Saldaño** (OIT Coronel Moldes)   
+Ing. Agr. **Daniela Moneta** (AER Valle de Lerma)   
+Ing. **Juan Ramón Rojas** (AER Santa Victoria Este)    
+Ing. Agr. **Daniel Lamberti** (AER Perico)     
+Tec. Recursos Hídricos **Fátima del Valle Miranda** (AER Palma Sola)   
+Ing. Agr. **Florencia Diaz** (AER Palma Sola)  
+Ing. Agr. **Héctor Diaz** (AER J.V. Gonzalez)  
+Ing. Agr. **Carlos G. Cabrera** (AER J.V. Gonzalez)    
+**Lucas Diaz** (AER Cafayate - OIT San Carlos)     
+Med. Vet. **Cristina Rosetto** (EECT Yuto)     
+Ing. RRNN **Fabian Tejerina** (EEA Salta)    
+Tec. Agr. **Carlos Arias** (OIT General Güemes) 
 
 
 ### 🤝 Red de colaboradores territoriales
