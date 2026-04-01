@@ -504,7 +504,7 @@ def crear_pdf(df_dia, fecha_selec, cant_total):
 
     # --- Equipo de trabajo ---
     pdf.set_font("Helvetica", 'B', 12)
-    pdf.cell(0, 10, "Equipo de trabajo:", ln=True)
+    pdf.cell(0, 10, "Equipo de trabajo - INTA:", ln=True)
 
     pdf.set_font("Helvetica", size=10)
     pdf.multi_cell(
@@ -733,7 +733,7 @@ def crear_pdf_mensual_region(df, region, fecha_desde, fecha_hasta):
     pdf.add_page()
 
     pdf.set_font("Helvetica", 'B', 12)
-    pdf.cell(0, 10, "Equipo de trabajo:", ln=True)
+    pdf.cell(0, 10, "Equipo de trabajo - INTA:", ln=True)
 
     pdf.set_font("Helvetica", size=10)
     pdf.multi_cell(
