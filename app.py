@@ -985,7 +985,9 @@ if seccion == "🗺️ Mapa":
 
             # Ícono según fenómeno
             icon_code = "cloud"
-            if "granizo" in r["fen_raw"]:
+            #if "granizo" in r["fen_raw"]:
+            fen = str(r.get("fen_raw", "")).lower()
+            if "granizo" in fen:
                 icon_code = "asterisk"
             elif "tormenta" in r["fen_raw"]:
                 icon_code = "flash"
