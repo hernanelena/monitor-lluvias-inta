@@ -983,15 +983,15 @@ if seccion == "🗺️ Mapa":
                 c_hex = "#1a73e8"
                 c_fol = "blue"
 
-            # Ícono según fenómeno
-            icon_code = "cloud"
-            #if "granizo" in r["fen_raw"]:
+            # Ícono según fenómeno (ROBUSTO)
             fen = str(r.get("fen_raw", "")).lower()
+
+            icon_code = "cloud"
             if "granizo" in fen:
                 icon_code = "asterisk"
-            elif "tormenta" in r["fen_raw"]:
+            elif "tormenta" in fen:
                 icon_code = "flash"
-            elif "viento" in r["fen_raw"]:
+            elif "viento" in fen:
                 icon_code = "leaf"
 
             popup_html = f"""
