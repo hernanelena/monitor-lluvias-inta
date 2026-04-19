@@ -235,7 +235,7 @@ st.markdown("""
 # =================================================
 # ENCABEZADO INSTITUCIONAL PRINCIPAL
 # =================================================
-logo_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Logo_INTA.svg/1200px-Logo_INTA.svg.png"
+logo_url = "https://github.com/hernanelena/monitor-lluvias-inta/blob/0d313b923de444081402a86286afc7d2e7169406/Logo_INTA.svg.png"
 
 st.markdown(f"""
 <style>
