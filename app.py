@@ -113,10 +113,10 @@ except:
 st.markdown("""
 <style>
 /* ==============================
-   RESALTAR DATE INPUT SIDEBAR (CORREGIDO)
+   RESALTAR DATE INPUT SIDEBAR (COMPATIBLE LIGHT & DARK)
    ============================== */
 
-/* Aplica el diseño únicamente al campo/caja de la fecha */
+/* Caja/Input de la fecha */
 section[data-testid="stSidebar"] div[data-baseweb="input"] {
     background-color: #DBEAFE !important;
     border-radius: 8px !important;
@@ -124,7 +124,7 @@ section[data-testid="stSidebar"] div[data-baseweb="input"] {
     padding: 2px !important;
 }
 
-/* Color y estilo del texto de la fecha dentro del campo */
+/* Texto interno de la fecha */
 section[data-testid="stSidebar"] div[data-baseweb="input"] input {
     font-weight: 700 !important;
     color: #1E3A8A !important;
@@ -132,10 +132,10 @@ section[data-testid="stSidebar"] div[data-baseweb="input"] input {
     background-color: transparent !important;
 }
 
-/* Color del label (texto descriptivo) superiores */
+/* Label (título) adaptable al tema activo */
 section[data-testid="stSidebar"] [data-testid="stDateInput"] label {
     font-weight: 600 !important;
-    color: #ffffff !important;
+    color: inherit !important;
 }
 </style>
 """, unsafe_allow_html=True)
