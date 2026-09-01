@@ -110,38 +110,32 @@ try:
 except:
     pass
 
-
 st.markdown("""
 <style>
 /* ==============================
    RESALTAR DATE INPUT SIDEBAR (CORREGIDO)
    ============================== */
 
-/* Aplicar bordes únicamente al widget de fecha específico */
-section[data-testid="stSidebar"] [data-testid="stDateInput"] {
+/* Aplica el diseño únicamente al campo/caja de la fecha */
+section[data-testid="stSidebar"] div[data-baseweb="input"] {
     background-color: #DBEAFE !important;
-    border-radius: 10px !important;
-    padding: 6px 8px !important;
+    border-radius: 8px !important;
     border: 2px solid #1E3A8A !important;
-    margin-bottom: 8px !important;
+    padding: 2px !important;
 }
 
-/* Evitar que se apliquen bordes a los div contenedores intermedios */
-section[data-testid="stSidebar"] [data-testid="stElementContainer"] {
-    border: none !important;
-}
-
-/* Input interno */
-section[data-testid="stSidebar"] input {
-    font-weight: 600 !important;
+/* Color y estilo del texto de la fecha dentro del campo */
+section[data-testid="stSidebar"] div[data-baseweb="input"] input {
+    font-weight: 700 !important;
     color: #1E3A8A !important;
     text-align: center !important;
-    background-color: white !important;
+    background-color: transparent !important;
 }
 
-/* Label */
-section[data-testid="stSidebar"] label {
+/* Color del label (texto descriptivo) superiores */
+section[data-testid="stSidebar"] [data-testid="stDateInput"] label {
     font-weight: 600 !important;
+    color: #ffffff !important;
 }
 </style>
 """, unsafe_allow_html=True)
