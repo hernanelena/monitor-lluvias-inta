@@ -110,20 +110,25 @@ try:
 except:
     pass
 
+
 st.markdown("""
 <style>
 /* ==============================
-   RESALTAR DATE INPUT SIDEBAR
+   RESALTAR DATE INPUT SIDEBAR (CORREGIDO)
    ============================== */
 
-/* Contenedor completo del input de fecha */
-section[data-testid="stSidebar"] div:has(input[type="date"]),
-section[data-testid="stSidebar"] div:has(input[aria-haspopup="dialog"]) {
+/* Aplicar bordes únicamente al widget de fecha específico */
+section[data-testid="stSidebar"] [data-testid="stDateInput"] {
     background-color: #DBEAFE !important;
     border-radius: 10px !important;
     padding: 6px 8px !important;
     border: 2px solid #1E3A8A !important;
     margin-bottom: 8px !important;
+}
+
+/* Evitar que se apliquen bordes a los div contenedores intermedios */
+section[data-testid="stSidebar"] [data-testid="stElementContainer"] {
+    border: none !important;
 }
 
 /* Input interno */
@@ -140,7 +145,6 @@ section[data-testid="stSidebar"] label {
 }
 </style>
 """, unsafe_allow_html=True)
-
 
 
 
