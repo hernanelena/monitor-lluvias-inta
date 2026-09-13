@@ -61,7 +61,8 @@ Ing. Agr. **Carlos G. Cabrera** (AER J.V. Gonzalez)
 **Lucas Diaz** (AER Cafayate - OIT San Carlos)     
 Med. Vet. **Cristina Rosetto** (EECT Yuto)     
 Ing. RRNN **Fabian Tejerina** (EEA Salta)    
-Tec. Agr. **Carlos Arias** (OIT General Güemes) 
+Tec. Agr. **Carlos Arias** (OIT General Güemes)    
+Ing. Agr. **Diego Kalman** (AER Cafayate)    
 
 
 ### 🤝 Red de colaboradores territoriales
@@ -294,96 +295,154 @@ URL_MAPA = "https://territorios.inta.gob.ar/assets/aFwWKNGXZKppgNYKa33wC8/submis
 
 TOKEN = st.secrets["INTA_TOKEN"]
 
+
 HEADERS = {"Authorization": f"Token {TOKEN}"}
 
 # ==============================================================
 # FUNCIONES AUXILIARES
 # ==============================================================
 
-def extraer_coordenadas(row):
-    try:
-        v = row.get("Ubicaci_in") or row.get("ubicaci_in") or row.get("_Ubicaci_in")
-        if isinstance(v, str):
-            p = v.split()
-            return float(p[0]), float(p[1])
-        if isinstance(v, list):
+def parse_coordenada_rapido(v):
+    if isinstance(v, str):
+        parts = v.split()
+        if len(parts) >= 2:
+            try:
+                return float(parts[0]), float(parts[1])
+            except ValueError:
+                pass
+    elif isinstance(v, (list, tuple)) and len(v) >= 2:
+        try:
             return float(v[0]), float(v[1])
-    except:
-        pass
-    return None, None
+        except (ValueError, TypeError):
+            pass
+    return np.nan, np.nan
 
-@st.cache_data(ttl=1800)
-def cargar_datos(solo_reciente=True):
-    r1 = requests.get(URL_PRECIPITACIONES, headers=HEADERS)
-    r2 = requests.get(URL_MAPA, headers=HEADERS)
 
-    df_p = pd.DataFrame(r1.json())
-    df_c = pd.DataFrame(r2.json())
+@st.cache_data(ttl=86400, show_spinner="Actualizando base de pluviómetros...")
+def cargar_estaciones():
+    try:
+        r2 = requests.get(URL_MAPA, headers=HEADERS, timeout=30)
+        r2.raise_for_status()
+        df_c = pd.DataFrame(r2.json())
+    except Exception as e:
+        st.error(f"Error al conectar con la base de pluviómetros: {e}")
+        return pd.DataFrame(), "cod"
 
-    df_p["fecha_dt"] = pd.to_datetime(df_p["Fecha_del_dato"])
-    if solo_reciente:
-        corte = pd.Timestamp.now() - pd.Timedelta(days=60)
-        df_p = df_p[df_p["fecha_dt"] >= corte]
+    if df_c.empty:
+        return pd.DataFrame(), "cod"
 
-    df_p["fecha"] = df_p["fecha_dt"].dt.date
-    df_p["mm"] = pd.to_numeric(df_p["Mil_metros_registrados"], errors="coerce").fillna(0)
-    df_p["fen_raw"] = df_p["fenomeno"].astype(str).str.lower()
-    
-    # =================================================
-# NORMALIZACIÓN DE FENÓMENOS ATMOSFÉRICOS
-# =================================================
-    df_p["fen_raw"] = (
-        df_p["fenomeno"]
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
+    col_u = next((c for c in ["Ubicaci_in", "ubicaci_in", "_Ubicaci_in"] if c in df_c.columns), None)
+    if col_u:
+        coords = [parse_coordenada_rapido(v) for v in df_c[col_u]]
+        df_c["lat"] = [c[0] for c in coords]
+        df_c["lon"] = [c[1] for c in coords]
+    else:
+        df_c["lat"] = np.nan
+        df_c["lon"] = np.nan
 
-    map_fen = {
-        "viento": "Vientos fuertes",
-        "granizo": "Granizo",
-        "tormenta": "Tormentas eléctricas",
-        "sinfeno": "Sin obs. de fenómenos"
-    }
-
-    df_p["Fenómeno atmosférico"] = (
-        df_p["fen_raw"]
-        .replace(map_fen)
-        .replace({
-            "none": "Sin obs. de fenómenos",
-            "nan": "Sin obs. de fenómenos",
-            "": "Sin obs. de fenómenos"
-        })
-    )
-        
-    
-
-    df_p["cod"] = df_p["Pluviometros"].astype(str).str.replace(".0", "", regex=False)
-    df_c["cod"] = df_c["Codigo_txt_del_pluviometro"].astype(str).str.replace(".0", "", regex=False)
-
-    res = df_c.apply(extraer_coordenadas, axis=1)
-    df_c["lat"], df_c["lon"] = zip(*res)
+    if "Codigo_txt_del_pluviometro" in df_c.columns:
+        df_c["cod"] = df_c["Codigo_txt_del_pluviometro"].astype(str).str.replace(".0", "", regex=False).str.strip()
+    else:
+        df_c["cod"] = df_c.index.astype(str)
 
     col_n = next((c for c in df_c.columns if "Nombre_del_Pluviometro" in c), "cod")
     col_depto = next((c for c in df_c.columns if "depto" in c.lower()), None)
     col_prov = next((c for c in df_c.columns if "prov" in c.lower()), None)
     col_region = next((c for c in df_c.columns if "reg" in c.lower()), None)
 
-    columnas = ["cod", "lat", "lon", col_n, col_depto, col_prov, col_region]
-    columnas = [c for c in columnas if c]
+    cols_deseadas = ["cod", "lat", "lon", col_n]
+    if col_depto and col_depto not in cols_deseadas:
+        cols_deseadas.append(col_depto)
+    if col_prov and col_prov not in cols_deseadas:
+        cols_deseadas.append(col_prov)
+    if col_region and col_region not in cols_deseadas:
+        cols_deseadas.append(col_region)
 
-    df = df_p.merge(df_c[columnas], on="cod", how="left")
-    df["Pluviómetro"] = df[col_n]
-    df["Departamento"] = df[col_depto].fillna("S/D") if col_depto else "S/D"
-    df["Provincia"] = df[col_prov].fillna("S/D") if col_prov else "S/D"
-    df["Region"] = df[col_region].fillna("General") if col_region else "General"
+    df_est = df_c[cols_deseadas].copy()
+    df_est["Pluviómetro"] = df_est[col_n].fillna(df_est["cod"])
+    df_est["Departamento"] = df_est[col_depto].fillna("S/D") if col_depto else "S/D"
+    df_est["Provincia"] = df_est[col_prov].fillna("S/D") if col_prov else "S/D"
+    df_est["Region"] = df_est[col_region].fillna("General") if col_region else "General"
 
-    return df, df_c, col_n
+    return df_est, col_n
+
+
+@st.cache_data(ttl=1800, show_spinner="Descargando registros de precipitaciones...")
+def cargar_precipitaciones(solo_reciente=True):
+    try:
+        r1 = requests.get(URL_PRECIPITACIONES, headers=HEADERS, timeout=60)
+        r1.raise_for_status()
+        raw_items = r1.json()
+    except Exception as e:
+        st.error(f"Error al descargar datos de precipitaciones: {e}")
+        return pd.DataFrame()
+
+    if not raw_items:
+        return pd.DataFrame()
+
+    filas = []
+    for it in raw_items:
+        filas.append({
+            "Fecha_del_dato": it.get("Fecha_del_dato"),
+            "Mil_metros_registrados": it.get("Mil_metros_registrados"),
+            "fenomeno": it.get("fenomeno"),
+            "Pluviometros": it.get("Pluviometros")
+        })
+
+    df_p = pd.DataFrame(filas)
+    df_p["fecha_dt"] = pd.to_datetime(df_p["Fecha_del_dato"], errors="coerce")
+    df_p = df_p.dropna(subset=["fecha_dt"])
+
+    if solo_reciente:
+        corte = pd.Timestamp.now() - pd.Timedelta(days=60)
+        df_p = df_p[df_p["fecha_dt"] >= corte]
+
+    df_p["fecha"] = df_p["fecha_dt"].dt.date
+    df_p["mm"] = pd.to_numeric(df_p["Mil_metros_registrados"], errors="coerce").fillna(0.0)
+
+    fen_clean = df_p["fenomeno"].astype(str).str.strip().str.lower()
+    df_p["fen_raw"] = fen_clean
+    map_fen = {
+        "viento": "Vientos fuertes",
+        "granizo": "Granizo",
+        "tormenta": "Tormentas eléctricas",
+        "sinfeno": "Sin obs. de fenómenos"
+    }
+    df_p["Fenómeno atmosférico"] = fen_clean.map(map_fen).fillna("Sin obs. de fenómenos")
+    df_p["Fenómeno atmosférico"] = df_p["Fenómeno atmosférico"].replace({
+        "none": "Sin obs. de fenómenos",
+        "nan": "Sin obs. de fenómenos",
+        "": "Sin obs. de fenómenos"
+    })
+
+    df_p["cod"] = df_p["Pluviometros"].astype(str).str.replace(".0", "", regex=False).str.strip()
+
+    return df_p[["fecha_dt", "fecha", "mm", "fen_raw", "Fenómeno atmosférico", "cod"]]
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def obtener_datos(solo_reciente=True):
+    df_est, col_n = cargar_estaciones()
+    df_p = cargar_precipitaciones(solo_reciente=solo_reciente)
+
+    if df_p.empty or df_est.empty:
+        return pd.DataFrame(), df_est, col_n
+
+    cols_est = ["cod", "lat", "lon", "Pluviómetro", "Departamento", "Provincia", "Region"]
+    df = df_p.merge(df_est[cols_est], on="cod", how="left")
+
+    df["Pluviómetro"] = df["Pluviómetro"].fillna(df["cod"])
+    df["Departamento"] = df["Departamento"].fillna("S/D")
+    df["Provincia"] = df["Provincia"].fillna("S/D")
+    df["Region"] = df["Region"].fillna("General")
+
+    return df, df_est, col_n
 
 # ==============================================================
 # PDF DIARIO
 # ==============================================================
 
+@st.cache_data(show_spinner=False)
 def crear_pdf(df_dia, fecha_selec, cant_total):
     """Genera bytes de PDF con el resumen diario."""
 
@@ -560,6 +619,7 @@ def crear_pdf(df_dia, fecha_selec, cant_total):
 # PDF MENSUAL POR REGIÓN / DEPARTAMENTO
 # ==============================================================
 
+@st.cache_data(show_spinner=False)
 def crear_pdf_mensual_region(df, region, fecha_desde, fecha_hasta):
     """
     Genera PDF mensual acumulado.
@@ -785,18 +845,19 @@ def crear_pdf_mensual_region(df, region, fecha_desde, fecha_hasta):
 # KML DIARIO
 # ==============================================================
 
+@st.cache_data(show_spinner=False)
 def generar_kml(df):
     kml = ET.Element("kml", xmlns="http://www.opengis.net/kml/2.2")
     doc = ET.SubElement(kml, "Document")
 
     for _, r in df.iterrows():
         pm = ET.SubElement(doc, "Placemark")
-        ET.SubElement(pm, "name").text = r["Pluviómetro"]
+        ET.SubElement(pm, "name").text = str(r["Pluviómetro"])
 
         desc = ET.SubElement(pm, "description")
         desc.text = f"""
         <b>Pluviómetro:</b> {r['Pluviómetro']}<br>
-        <b>Lluvia:</b> {r['mm']} mm<br>
+        <b>Lluvia:</b> {r['mm']:.1f} mm<br>
         <b>Departamento:</b> {r['Departamento']}<br>
         <b>Provincia:</b> {r['Provincia']}
         """
@@ -806,8 +867,23 @@ def generar_kml(df):
 
     return ET.tostring(kml, encoding="utf-8", xml_declaration=True)
 
+
+@st.cache_data(show_spinner=False)
+def exportar_excel(df_export):
+    buffer = BytesIO()
+    df_export.to_excel(buffer, index=False, engine="openpyxl")
+    return buffer.getvalue()
+
 # ==============================================================
-# SIDEBAR – NAVEGACIÓN
+# CARGA DE DATOS PRINCIPAL
+# ==============================================================
+
+df, df_estaciones, col_nombre_est = obtener_datos(
+    solo_reciente=not st.session_state.cargar_todo
+)
+
+# ==============================================================
+# SIDEBAR – NAVEGACIÓN Y AJUSTES GLOBALES
 # ==============================================================
 
 st.sidebar.markdown(
@@ -818,12 +894,12 @@ st.sidebar.markdown(
         padding:12px 14px;
         border-radius:10px;
         margin-bottom:12px;
-        font-size:20px;
+        font-size:18px;
         font-weight:700;
         text-align:center;
         box-shadow:0 2px 6px rgba(0,0,0,0.25);
     ">
-        📊 Panel de control
+        📊 Panel de Control
     </div>
     """,
     unsafe_allow_html=True
@@ -832,326 +908,286 @@ st.sidebar.markdown(
 seccion = st.sidebar.radio(
     "📌 Navegación",
     [
-        "🗺️ Mapa",
-        "📊 Día",
-        "📅 Mes",
-        "🏆 Máx / Mín",
-        "📈 Histórico",
-        "📑 Reportes",        
-        "🌧️ Red",
-        "ℹ️ Info"
+        "📅 Monitor Diario",
+        "📊 Acumulados Mensuales",
+        "🏆 Récords y Extremos",
+        "📈 Consulta Histórica",
+        "📑 Reportes (PDF)",
+        "🌧️ Red de Pluviómetros",
+        "ℹ️ Información"
     ]
 )
 
 st.sidebar.markdown("---")
 
-# ==============================================================
-# CARGA DE DATOS
-# ==============================================================
+# MODO DE DATOS (RÁPIDO VS COMPLETO)
+total_pluvios = df_estaciones.shape[0] if not df_estaciones.empty else 0
+total_registros = df.shape[0] if not df.empty else 0
 
-df, df_estaciones, col_nombre_est = cargar_datos(
-    solo_reciente=not st.session_state.cargar_todo
-)
-
-# ==============================================================
-# CONTROLES GLOBALES
-# ==============================================================
-
-f_hoy = st.sidebar.date_input(
-    "Seleccione fecha de consulta:",
-    value=df["fecha"].max()
-)
-
-# =====================================================
-# PLUVIÓMETROS REPORTADOS (SIDEBAR)
-# =====================================================
-# Total de pluviómetros de la red
-total_pluvios = df_estaciones.shape[0]
-
-# Pluviómetros con registro en la fecha seleccionada
-reportados = (
-    df[df["fecha"] == f_hoy]["cod"]
-    .nunique()
-)
-
-st.sidebar.markdown(
-    f"**Pluviómetros reportados:** {reportados} / {total_pluvios}"
-)
+st.sidebar.markdown(f"**📡 Red de pluviómetros:** {total_pluvios} estaciones")
+st.sidebar.markdown(f"**📋 Registros cargados:** {total_registros:,}".replace(",", "."))
 
 if not st.session_state.cargar_todo:
-    if st.sidebar.button("📂 Cargar historial completo"):
+    st.sidebar.caption("⚡ *Modo Rápido activo (últimos 60 días)*")
+    if st.sidebar.button("📂 Cargar historial completo", use_container_width=True):
         st.session_state.cargar_todo = True
         st.cache_data.clear()
         st.rerun()
 else:
-    if st.sidebar.button("⚡ Volver a modo rápido"):
+    st.sidebar.caption("📂 *Historial completo activo (+5.000 registros)*")
+    if st.sidebar.button("⚡ Volver a modo rápido", use_container_width=True):
         st.session_state.cargar_todo = False
         st.cache_data.clear()
         st.rerun()
 
+st.sidebar.markdown("---")
+
+if df.empty:
+    st.error("No se pudieron cargar datos de precipitaciones. Verifique la conexión o credenciales.")
+    st.stop()
+
+
 # ==============================================================
-# SECCIONES PRINCIPALES
+# 1. MONITOR DIARIO (UNIFICA MAPA, TABLA Y RESUMEN)
 # ==============================================================
+if seccion == "📅 Monitor Diario":
 
-# ------------------------- MAPA DIARIO -------------------------
-# ------------------------- MAPA DIARIO -------------------------
-if seccion == "🗺️ Mapa":
-    st.subheader(f"🗺️ Lluvia del {f_hoy.strftime('%d/%m/%Y')}")
-    st.info(
-        f"Lluvia acumulada desde las 9 hs del "
-        f"{f_hoy.strftime('%d/%m/%Y')} a las 9 hs del día "
-        f"{(f_hoy + timedelta(days=1)).strftime('%d/%m/%Y')} "
-        f"- Día pluviométrico"
-    )
+    fecha_defecto = df["fecha"].max() if not df.empty else date.today()
+    fecha_minima = df["fecha"].min() if not df.empty else date.today()
 
-    df_dia = df[df["fecha"] == f_hoy].dropna(subset=["lat", "lon"])
-
-    if df_dia.empty:
-        st.warning("No hay datos para la fecha seleccionada.")
-    else:
-        centro = [df_dia["lat"].mean(), df_dia["lon"].mean()]
-
-        m = folium.Map(location=centro, zoom_start=7, tiles=None)
-
-        # === CAPAS BASE ===
-        folium.TileLayer(
-            tiles="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
-            attr="Google",
-            name="Google Satélite",
-            overlay=False,
-        ).add_to(m)
-
-        folium.TileLayer(
-            tiles="https://wms.ign.gob.ar/geoserver/gwc/service/tms/"
-                  "1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png",
-            attr="IGN",
-            name="Argenmap (IGN)",
-            overlay=False,
-        ).add_to(m)
-
-        # === LEYENDA ===
-        legend_html = """
-        <div style="
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            width: 130px;
-            background-color: rgba(255, 255, 255, 0.9);
-            border: 2px solid #111827;
-            z-index: 9999;
-            font-size: 12px;
-            padding: 8px;
-            border-radius: 6px;
-            font-family: sans-serif;
-            line-height: 1.4;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-            color: #111111;
-        ">
-            <b>Referencia</b><br>
-            <span style="display:inline-block;width:10px;height:10px;
-                background:#1a73e8;border-radius:50%;margin-right:6px;"></span>
-            0–20 mm<br>
-            <span style="display:inline-block;width:10px;height:10px;
-                background:#ef6c00;border-radius:50%;margin-right:6px;"></span>
-            20–50 mm<br>
-            <span style="display:inline-block;width:10px;height:10px;
-                background:#d32f2f;border-radius:50%;margin-right:6px;"></span>
-            +50 mm
-        </div>
-        """
-        
-        
-        
-        m.get_root().html.add_child(folium.Element(legend_html))
-
-        LocateControl(auto_start=False, flyTo=True).add_to(m)
-        folium.LayerControl(position="bottomright").add_to(m)
-
-        # === PUNTOS ===
-        for _, r in df_dia.iterrows():
-
-            # Color según lluvia
-            if r["mm"] > 50:
-                c_hex = "#d32f2f"
-                c_fol = "red"
-            elif r["mm"] > 20:
-                c_hex = "#ef6c00"
-                c_fol = "orange"
-            else:
-                c_hex = "#1a73e8"
-                c_fol = "blue"
-
-            # Ícono según fenómeno (ROBUSTO)
-            fen = str(r.get("fen_raw", "")).lower()
-
-            icon_code = "cloud"
-            if "granizo" in fen:
-                icon_code = "asterisk"
-            elif "tormenta" in fen:
-                icon_code = "flash"
-            elif "viento" in fen:
-                icon_code = "leaf"
-
-            popup_html = f"""
-            <div style="font-family:sans-serif;min-width:180px;">
-                <div style="
-                    margin:0;
-                    color:{c_hex};
-                    border-bottom:2px solid {c_hex};
-                    font-size:16px;
-                    font-weight:bold;
-                    padding-bottom:5px;
-                    margin-bottom:8px;">
-                    {r['Pluviómetro']}
-                </div>
-                <div style="font-size:14px;">
-                    <b>Lluvia:</b> {r['mm']} mm
-                </div>
-                <div style="font-size:13px;margin-top:4px;">
-                    <b>Fenómeno:</b> {r.get('Fenómeno atmosférico', 'S/D')}
-                </div>
-                <div style="
-                    font-size:12px;
-                    color:#333;
-                    border-top:1px solid #eee;
-                    padding-top:5px;
-                    margin-top:6px;">
-                    <b>{r['Departamento']}, {r['Provincia']}</b>
-                </div>
-            </div>
-            """
-
-            # Número grande (mm)
-            folium.map.Marker(
-                [r["lat"], r["lon"]],
-                icon=folium.DivIcon(
-                    icon_size=(40, 20),
-                    icon_anchor=(20, -10),
-                    html=f"""
-                    <div style="
-                        color:{c_hex};
-                        font-weight:900;
-                        font-size:11pt;
-                        text-shadow:1px 1px 0 #fff;">
-                        {int(r['mm'])}
-                    </div>
-                    """
-                )
-            ).add_to(m)
-
-            # Marcador principal
-            folium.Marker(
-                [r["lat"], r["lon"]],
-                popup=folium.Popup(popup_html, max_width=260),
-                icon=folium.Icon(color=c_fol, icon=icon_code),
-            ).add_to(m)
-
-        st_folium(m, width="100%", height=560)
-
-
-# ------------------------- DÍA -------------------------
-# ------------------------- DÍA -------------------------
-elif seccion == "📊 Día":
-
-    st.subheader(f"📊 Resumen del {f_hoy.strftime('%d/%m/%Y')}")
-
-    df_dia = df[df["fecha"] == f_hoy]
-
-    if df_dia.empty:
-        st.warning("No hay datos para la fecha seleccionada.")
-    else:
-        # =================================================
-        # RESUMEN POR REGIÓN (máx / prom / cantidad)
-        # =================================================
-        resumen_reg = (
-            df_dia
-            .groupby("Region")["mm"]
-            .agg(["mean", "max", "count"])
-            .sort_values("mean", ascending=False)
-            .reset_index()
+    col_f1, col_f2 = st.columns([0.4, 0.6])
+    with col_f1:
+        f_hoy = st.date_input(
+            "📅 Seleccione fecha de consulta:",
+            value=fecha_defecto,
+            min_value=fecha_minima,
+            max_value=fecha_defecto
         )
 
-        st.markdown("### 📌 Resumen por Región")
+    df_dia = df[df["fecha"] == f_hoy].copy()
+    reportados = df_dia["cod"].nunique()
 
-        filas = [resumen_reg[i:i+3] for i in range(0, len(resumen_reg), 3)]
+    with col_f2:
+        st.info(
+            f"**Día pluviométrico:** Acumulado desde las 9:00 h del {f_hoy.strftime('%d/%m/%Y')} "
+            f"a las 9:00 h del {(f_hoy + timedelta(days=1)).strftime('%d/%m/%Y')}.  \n"
+            f"**Reportaron:** {reportados} de {total_pluvios} pluviómetros."
+        )
 
-        for fila in filas:
-            cols = st.columns(3)
-            for i, (_, r) in enumerate(fila.iterrows()):
-                with cols[i]:
-                    st.metric(
-                        label=f"Región: {r['Region']}",
-                        value=f"{r['mean']:.1f} mm prom.",
-                        delta=f"Máx: {r['max']} mm ({int(r['count'])} pluviómetros)"
-                    )
+    if df_dia.empty:
+        st.warning(f"No hay registros de precipitación para la fecha {f_hoy.strftime('%d/%m/%Y')}.")
+    else:
+        tab_mapa, tab_resumen, tab_descargas = st.tabs([
+            "🗺️ Mapa Interactivo",
+            "📊 Resumen Regional y Tabla",
+            "📥 Descargas del Día"
+        ])
 
-        # =================================================
-        # TABLA DETALLADA DEL DÍA
-        # =================================================
-        st.markdown("---")
-        st.markdown("### 📋 Detalle de Registros")
+        with tab_mapa:
+            df_dia_mapa = df_dia.dropna(subset=["lat", "lon"])
+            if df_dia_mapa.empty:
+                st.warning("No hay registros georreferenciados para graficar en el mapa.")
+            else:
+                centro = [df_dia_mapa["lat"].mean(), df_dia_mapa["lon"].mean()]
+                m = folium.Map(location=centro, zoom_start=7, tiles=None)
 
-        st.dataframe(
-            df_dia[
-                [
+                folium.TileLayer(
+                    tiles="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+                    attr="Google",
+                    name="Google Satélite",
+                    overlay=False,
+                ).add_to(m)
+
+                folium.TileLayer(
+                    tiles="https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png",
+                    attr="IGN",
+                    name="Argenmap (IGN)",
+                    overlay=False,
+                ).add_to(m)
+
+                legend_html = """
+                <div style="
+                    position: fixed;
+                    top: 10px;
+                    right: 10px;
+                    width: 130px;
+                    background-color: rgba(255, 255, 255, 0.92);
+                    border: 2px solid #111827;
+                    z-index: 9999;
+                    font-size: 12px;
+                    padding: 8px;
+                    border-radius: 6px;
+                    font-family: sans-serif;
+                    line-height: 1.4;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+                    color: #111111;
+                ">
+                    <b>Referencia</b><br>
+                    <span style="display:inline-block;width:10px;height:10px;background:#1a73e8;border-radius:50%;margin-right:6px;"></span>0–20 mm<br>
+                    <span style="display:inline-block;width:10px;height:10px;background:#ef6c00;border-radius:50%;margin-right:6px;"></span>20–50 mm<br>
+                    <span style="display:inline-block;width:10px;height:10px;background:#d32f2f;border-radius:50%;margin-right:6px;"></span>+50 mm
+                </div>
+                """
+                m.get_root().html.add_child(folium.Element(legend_html))
+                LocateControl(auto_start=False, flyTo=True).add_to(m)
+                folium.LayerControl(position="bottomright").add_to(m)
+
+                for _, r in df_dia_mapa.iterrows():
+                    val_mm = r["mm"]
+                    if val_mm > 50:
+                        c_hex, c_fol = "#d32f2f", "red"
+                    elif val_mm > 20:
+                        c_hex, c_fol = "#ef6c00", "orange"
+                    else:
+                        c_hex, c_fol = "#1a73e8", "blue"
+
+                    fen = str(r.get("fen_raw", "")).lower()
+                    icon_code = "cloud"
+                    if "granizo" in fen:
+                        icon_code = "asterisk"
+                    elif "tormenta" in fen:
+                        icon_code = "flash"
+                    elif "viento" in fen:
+                        icon_code = "leaf"
+
+                    popup_html = f"""
+                    <div style="font-family:sans-serif;min-width:180px;">
+                        <div style="margin:0;color:{c_hex};border-bottom:2px solid {c_hex};font-size:15px;font-weight:bold;padding-bottom:4px;margin-bottom:6px;">
+                            {r['Pluviómetro']}
+                        </div>
+                        <div style="font-size:14px;"><b>Lluvia:</b> {val_mm:.1f} mm</div>
+                        <div style="font-size:13px;margin-top:3px;"><b>Fenómeno:</b> {r.get('Fenómeno atmosférico', 'S/D')}</div>
+                        <div style="font-size:12px;color:#444;border-top:1px solid #eee;padding-top:4px;margin-top:6px;">
+                            <b>{r['Departamento']}, {r['Provincia']}</b>
+                        </div>
+                    </div>
+                    """
+
+                    folium.map.Marker(
+                        [r["lat"], r["lon"]],
+                        icon=folium.DivIcon(
+                            icon_size=(40, 20),
+                            icon_anchor=(20, -10),
+                            html=f"""
+                            <div style="color:{c_hex};font-weight:900;font-size:11pt;text-shadow:1px 1px 0 #fff;">
+                                {int(round(val_mm))}
+                            </div>
+                            """
+                        )
+                    ).add_to(m)
+
+                    folium.Marker(
+                        [r["lat"], r["lon"]],
+                        popup=folium.Popup(popup_html, max_width=260),
+                        icon=folium.Icon(color=c_fol, icon=icon_code),
+                    ).add_to(m)
+
+                st_folium(m, width="100%", height=580, key="mapa_diario", returned_objects=[])
+
+        with tab_resumen:
+            st.markdown("#### 📌 Resumen por Región")
+            resumen_reg = (
+                df_dia.groupby("Region")["mm"]
+                .agg(["mean", "max", "count"])
+                .sort_values("mean", ascending=False)
+                .reset_index()
+            )
+
+            filas_reg = [resumen_reg[i:i+3] for i in range(0, len(resumen_reg), 3)]
+            for fila_r in filas_reg:
+                cols_r = st.columns(3)
+                for idx, (_, reg) in enumerate(fila_r.iterrows()):
+                    with cols_r[idx]:
+                        st.metric(
+                            label=f"Región: {reg['Region']}",
+                            value=f"{reg['mean']:.1f} mm prom.",
+                            delta=f"Máx: {reg['max']:.1f} mm ({int(reg['count'])} pluviómetros)"
+                        )
+
+            st.markdown("---")
+            st.markdown("#### 📋 Detalle de Registros del Día")
+
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                provincias_dia = ["Todas"] + sorted(df_dia["Provincia"].dropna().unique().tolist())
+                sel_prov_dia = st.selectbox("Filtrar por Provincia:", provincias_dia)
+            with col_b2:
+                if sel_prov_dia != "Todas":
+                    deptos_disp = ["Todos"] + sorted(df_dia[df_dia["Provincia"] == sel_prov_dia]["Departamento"].dropna().unique().tolist())
+                else:
+                    deptos_disp = ["Todos"] + sorted(df_dia["Departamento"].dropna().unique().tolist())
+                sel_depto_dia = st.selectbox("Filtrar por Departamento:", deptos_disp)
+
+            df_dia_tabla = df_dia.copy()
+            if sel_prov_dia != "Todas":
+                df_dia_tabla = df_dia_tabla[df_dia_tabla["Provincia"] == sel_prov_dia]
+            if sel_depto_dia != "Todos":
+                df_dia_tabla = df_dia_tabla[df_dia_tabla["Departamento"] == sel_depto_dia]
+
+            df_dia_mostrar = (
+                df_dia_tabla[[
                     "Pluviómetro",
                     "Region",
                     "Departamento",
                     "Provincia",
                     "mm",
                     "Fenómeno atmosférico"
-                ]
-            ]
-            .sort_values("mm", ascending=False)
-            .rename(columns={"mm": "Lluvia (mm)"}),
-            use_container_width=True,
-            hide_index=True
-        )
-
-        # =================================================
-        # DESCARGAS DEL DÍA
-        # =================================================
-        st.markdown("---")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            pdf_dia = crear_pdf(df_dia, f_hoy, df_estaciones.shape[0])
-            st.download_button(
-                "📥 Descargar PDF diario",
-                pdf_dia,
-                file_name=f"reporte_diario_{f_hoy}.pdf",
-                mime="application/pdf",
-                use_container_width=True
+                ]]
+                .sort_values("mm", ascending=False)
+                .rename(columns={"mm": "Lluvia (mm)"})
             )
 
-        with col2:
-            kml_dia = generar_kml(df_dia.dropna(subset=["lat", "lon"]))
-            st.download_button(
-                "📍 Descargar KML del día",
-                kml_dia,
-                file_name=f"lluvia_{f_hoy}.kml",
-                mime="application/vnd.google-earth.kml+xml",
-                use_container_width=True
+            st.dataframe(
+                df_dia_mostrar,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Lluvia (mm)": st.column_config.NumberColumn(format="%.1f mm")
+                }
             )
+
+        with tab_descargas:
+            st.markdown("#### 📥 Descargas Oficiales del Día")
+            st.write("Exporte el reporte oficial en formato PDF institucional o el archivo geográfico KML para Google Earth.")
+
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                pdf_dia_bytes = crear_pdf(df_dia, f_hoy, total_pluvios)
+                st.download_button(
+                    label="📄 Descargar Reporte Diario (PDF)",
+                    data=pdf_dia_bytes,
+                    file_name=f"reporte_diario_{f_hoy}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+
+            with col_d2:
+                kml_dia_bytes = generar_kml(df_dia.dropna(subset=["lat", "lon"]))
+                st.download_button(
+                    label="📍 Descargar KML del Día (Google Earth)",
+                    data=kml_dia_bytes,
+                    file_name=f"lluvia_{f_hoy}.kml",
+                    mime="application/vnd.google-earth.kml+xml",
+                    use_container_width=True
+                )
 
 
 # ------------------------- MES -------------------------
 
 # ------------------------- MES -------------------------
-elif seccion == "📅 Mes":
+# ==============================================================
+# 2. ACUMULADOS MENSUALES
+# ==============================================================
+elif seccion == "📊 Acumulados Mensuales":
 
-    st.subheader("📅 Acumulados Mensuales")
+    st.subheader("📊 Acumulados Mensuales por Pluviómetro")
 
     if not st.session_state.cargar_todo:
         st.warning(
-            "⚠️ Mostrando últimos 60 días. "
-            "Para meses/años anteriores, active «Cargar Historial Completo» en el panel lateral."
+            "⚠️ Mostrando actualmente los últimos 60 días. "
+            "Para consultar el año completo o meses anteriores, active **«Cargar historial completo»** en el panel lateral."
         )
 
-    # =================================================
-    # PREPARACIÓN DE DATOS
-    # =================================================
     df_mes = df.copy()
     df_mes["Año"] = df_mes["fecha_dt"].dt.year
     df_mes["Mes_Num"] = df_mes["fecha_dt"].dt.month
@@ -1162,20 +1198,14 @@ elif seccion == "📅 Mes":
         9: "Sep", 10: "Oct", 11: "Nov", 12: "Dic"
     }
 
-    # =================================================
-    # SELECTOR DE AÑO
-    # =================================================
     anios_disponibles = sorted(df_mes["Año"].unique(), reverse=True)
-    sel_anio = st.selectbox("Año:", anios_disponibles)
+    sel_anio = st.selectbox("Seleccione Año:", anios_disponibles)
 
     df_anio = df_mes[df_mes["Año"] == sel_anio].copy()
 
     if df_anio.empty:
         st.warning("No hay datos para el año seleccionado.")
     else:
-        # =================================================
-        # TABLA PIVOTE
-        # =================================================
         tabla = (
             df_anio
             .pivot_table(
@@ -1184,35 +1214,25 @@ elif seccion == "📅 Mes":
                 values="mm",
                 aggfunc="sum"
             )
-            .fillna(0)
+            .fillna(0.0)
         )
 
-        # Renombrar columnas de meses
         tabla.columns = [meses_n[c] for c in tabla.columns]
-
-        # Total anual
         tabla["TOTAL"] = tabla.sum(axis=1)
 
-        # Ordenar por Pluviómetro (alfabético)
-        st.dataframe(
-            tabla
-            .sort_index(level=0)
-            .style
-            .format(
-                lambda x: f"{x:.1f}" if pd.notna(x) and x >= 1 else ""
-            ),
-            use_container_width=True
-        )
-        st.caption(
-            "Las celdas vacías indican ausencia de registro. "
-            "Solo se muestran valores con datos válidos de precipitación."
-        )
+        tabla_mostrar = tabla.sort_index(level=0).round(1)
 
-        # =================================================
-        # PDF MENSUAL (MISMO FORMATO INSTITUCIONAL)
-        # =================================================
+        st.dataframe(
+            tabla_mostrar,
+            use_container_width=True,
+            column_config={
+                c: st.column_config.NumberColumn(format="%.1f") for c in tabla_mostrar.columns
+            }
+        )
+        st.caption("Valores expresados en milímetros (mm). Celdas en 0 indican ausencia de registro en ese período.")
+
         st.markdown("---")
-        st.subheader("📄 Reporte mensual (PDF)")
+        st.markdown("#### 📄 Reporte Mensual Completo (PDF)")
 
         pdf_mensual = crear_pdf_mensual_region(
             df_anio,
@@ -1230,57 +1250,69 @@ elif seccion == "📅 Mes":
         )
 
 
-# ------------------------- MAX / MIN -------------------------
+# ==============================================================
+# 3. RÉCORDS Y EXTREMOS MENSUALES
+# ==============================================================
+elif seccion == "🏆 Récords y Extremos":
 
+    st.subheader("🏆 Máxima precipitación diaria registrada en el mes")
 
-# ------------------------- MÁXIMO MENSUAL POR PLUVIÓMETRO -------------------------
-elif seccion == "🏆 Máx / Mín":
-
-    st.subheader("🏆 Máxima precipitación mensual por pluviómetro")
-
-    # ============================
-    # SELECTORES
-    # ============================
     col1, col2 = st.columns(2)
-
     with col1:
         anios = sorted(df["fecha_dt"].dt.year.unique(), reverse=True)
         sel_anio = st.selectbox("Año:", anios)
 
-    with col2:
-        meses_n = {
-            1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
-            5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
-            9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
-        }
+    meses_n = {
+        1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+        5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+        9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+    }
 
+    with col2:
         meses_disp = sorted(
             df[df["fecha_dt"].dt.year == sel_anio]["fecha_dt"].dt.month.unique()
         )
-
         sel_mes = st.selectbox(
             "Mes:",
             meses_disp,
             format_func=lambda x: meses_n[x]
         )
 
-    # ============================
-    # FILTRAR MES Y VALORES VÁLIDOS
-    # ============================
-    df_mes = df[
+    df_mes_ext = df[
         (df["fecha_dt"].dt.year == sel_anio) &
         (df["fecha_dt"].dt.month == sel_mes) &
-        (df["mm"] >= 1)
+        (df["mm"] >= 1.0)
     ].copy()
 
-    if df_mes.empty:
-        st.warning("No hay registros válidos de precipitación para el mes seleccionado.")
+    if df_mes_ext.empty:
+        st.warning("No hay registros válidos de precipitación (≥ 1 mm) para el mes seleccionado.")
     else:
-        # ============================
-        # MÁXIMO POR PLUVIÓMETRO
-        # ============================
-        idx_max = df_mes.groupby("Pluviómetro")["mm"].idxmax()
-        df_max = df_mes.loc[idx_max].copy()
+        max_reg = df_mes_ext.loc[df_mes_ext["mm"].idxmax()]
+
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            st.metric(
+                "Récord del mes",
+                f"{max_reg['mm']:.1f} mm",
+                f"{max_reg['Pluviómetro']}"
+            )
+        with m2:
+            st.metric(
+                "Fecha del récord",
+                max_reg["fecha_dt"].strftime("%d/%m/%Y"),
+                f"{max_reg['Departamento']}"
+            )
+        with m3:
+            st.metric(
+                "Estaciones con lluvia ≥ 1mm",
+                f"{df_mes_ext['Pluviómetro'].nunique()} estaciones"
+            )
+
+        st.markdown("---")
+        st.markdown("#### 📋 Mayor precipitación individual por pluviómetro")
+
+        idx_max = df_mes_ext.groupby("Pluviómetro")["mm"].idxmax()
+        df_max = df_mes_ext.loc[idx_max].copy()
 
         df_max["Año"] = sel_anio
         df_max["Mes"] = meses_n[sel_mes]
@@ -1296,88 +1328,69 @@ elif seccion == "🏆 Máx / Mín":
             "Fecha"
         ]].rename(columns={
             "mm": "Máxima (mm)"
-        }).sort_values("Pluviómetro")
-
-        #st.markdown("### 📋 Máxima mensual registrada en cada pluviómetro")
+        }).sort_values("Máxima (mm)", ascending=False)
 
         st.dataframe(
-            tabla_max.style.format(
-                {"Máxima (mm)": lambda x: f"{x:.1f}" if x >= 1 else ""}
-            ),
+            tabla_max,
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            column_config={
+                "Máxima (mm)": st.column_config.NumberColumn(format="%.1f mm")
+            }
         )
 
         st.caption(
-            "Se muestra, para cada pluviómetro, la mayor precipitación registrada "
-            "durante el mes seleccionado y la fecha en que ocurrió. "
-            "Solo se consideran valores válidos (≥ 1 mm)."
+            "Se muestra, para cada pluviómetro, el evento de mayor precipitación registrado "
+            "durante el mes seleccionado y la fecha exacta en que ocurrió."
         )
 
 
+# ==============================================================
+# 4. CONSULTA HISTÓRICA (OPTIMIZADA)
+# ==============================================================
+elif seccion == "📈 Consulta Histórica":
 
+    st.subheader("📈 Consulta Histórica de Precipitaciones")
 
+    col_f_izq, col_f_der = st.columns([0.65, 0.35])
 
+    with col_f_izq:
+        provincias_hist = ["Todas"] + sorted(df["Provincia"].dropna().unique().tolist())
+        sel_prov_hist = st.selectbox("Filtrar lista de pluviómetros por provincia:", provincias_hist)
 
+        if sel_prov_hist != "Todas":
+            estaciones_disp = sorted(df[df["Provincia"] == sel_prov_hist]["Pluviómetro"].unique())
+        else:
+            estaciones_disp = sorted(df["Pluviómetro"].unique())
 
-
-# ------------------------- HISTÓRICO -------------------------
-# ------------------------- HISTÓRICO -------------------------
-elif seccion == "📈 Histórico":
-
-    st.subheader("📈 Consulta histórica de precipitaciones")
-
-    # ============================
-    # FILTROS
-    # ============================
-    col1, col2, col3 = st.columns([0.35, 0.35, 0.3])
-
-    with col1:
         sel_est = st.multiselect(
-            "Pluviómetro(s):",
-            sorted(df["Pluviómetro"].unique())
+            "Seleccione Pluviómetro(s):",
+            estaciones_disp,
+            placeholder="Escriba o elija una o más estaciones..."
         )
 
-    with col2:
-        f_desde = st.date_input(
-            "Desde:",
-            df["fecha"].min()
-        )
-        f_hasta = st.date_input(
-            "Hasta:",
-            df["fecha"].max()
-        )
-
-    with col3:
-        modo = st.radio(
-            "Modo:",
-            ["Diario", "Mensual"]
-        )
+    with col_f_der:
+        f_desde = st.date_input("Fecha Desde:", df["fecha"].min())
+        f_hasta = st.date_input("Fecha Hasta:", df["fecha"].max())
+        modo = st.radio("Agrupación:", ["Diario", "Mensual"], horizontal=True)
 
     if not sel_est:
-        st.info("Seleccione uno o más pluviómetros para visualizar el histórico.")
+        st.info("💡 Seleccione uno o más pluviómetros en el desplegable superior para ver los registros.")
         st.stop()
 
-    # ============================
-    # FILTRADO BASE
-    # ============================
     df_filt = df[
         (df["Pluviómetro"].isin(sel_est)) &
         (df["fecha"] >= f_desde) &
         (df["fecha"] <= f_hasta) &
-        (df["mm"] >= 1)
+        (df["mm"] >= 1.0)
     ].copy()
 
     if df_filt.empty:
-        st.warning("No hay datos válidos para los filtros seleccionados.")
+        st.warning("No se encontraron registros de precipitación (≥ 1 mm) para los filtros seleccionados.")
         st.stop()
 
-    # ============================
-    # VISTA DIARIA
-    # ============================
     if modo == "Diario":
-
-        tabla = (
+        tabla_hist = (
             df_filt[
                 [
                     "fecha_dt",
@@ -1394,103 +1407,79 @@ elif seccion == "📈 Histórico":
             })
             .sort_values("Fecha", ascending=False)
         )
-
-        tabla["Fecha"] = tabla["Fecha"].dt.strftime("%d/%m/%Y")
+        tabla_hist["Fecha"] = tabla_hist["Fecha"].dt.strftime("%d/%m/%Y")
 
         st.dataframe(
-            tabla.style.format(
-                {"Lluvia (mm)": lambda x: f"{x:.1f}"}
-            ),
+            tabla_hist,
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            column_config={
+                "Lluvia (mm)": st.column_config.NumberColumn(format="%.1f mm")
+            }
         )
-
-    # ============================
-    # VISTA MENSUAL
-    # ============================
     else:
         df_filt["Año"] = df_filt["fecha_dt"].dt.year
         df_filt["Mes_Num"] = df_filt["fecha_dt"].dt.month
 
         meses = {
-            1:"Enero", 2:"Febrero", 3:"Marzo", 4:"Abril",
-            5:"Mayo", 6:"Junio", 7:"Julio", 8:"Agosto",
-            9:"Septiembre", 10:"Octubre", 11:"Noviembre", 12:"Diciembre"
+            1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+            5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+            9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
         }
 
-        tabla = (
+        tabla_hist = (
             df_filt
-            .groupby(
-                ["Año", "Mes_Num", "Pluviómetro", "Departamento", "Provincia"]
-            )["mm"]
+            .groupby(["Año", "Mes_Num", "Pluviómetro", "Departamento", "Provincia"])["mm"]
             .sum()
             .reset_index()
         )
-
-        tabla["Mes"] = tabla["Mes_Num"].map(meses)
-
-        tabla = (
-            tabla[
-                ["Año", "Mes", "Pluviómetro", "Departamento", "Provincia", "mm"]
-            ]
+        tabla_hist["Mes"] = tabla_hist["Mes_Num"].map(meses)
+        tabla_hist = (
+            tabla_hist[["Año", "Mes", "Pluviómetro", "Departamento", "Provincia", "mm"]]
             .rename(columns={"mm": "Lluvia acumulada (mm)"})
             .sort_values(["Pluviómetro", "Año", "Mes"])
         )
 
         st.dataframe(
-            tabla.style.format(
-                {"Lluvia acumulada (mm)": lambda x: f"{x:.1f}" if x >= 1 else ""}
-            ),
+            tabla_hist,
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            column_config={
+                "Lluvia acumulada (mm)": st.column_config.NumberColumn(format="%.1f mm")
+            }
         )
 
-    # ============================
-    # DESCARGA
-    # ============================
     st.markdown("---")
-    st.markdown("### 📥 Descargar datos")
-
+    st.markdown("#### 📥 Exportar Resultados")
     col_csv, col_xls = st.columns(2)
 
     with col_csv:
         st.download_button(
             "⬇️ Descargar CSV",
-            tabla.to_csv(index=False).encode("utf-8"),
+            tabla_hist.to_csv(index=False).encode("utf-8"),
             file_name="historico_precipitaciones.csv",
             mime="text/csv",
             use_container_width=True
         )
 
     with col_xls:
-        buffer = BytesIO()
-        tabla.to_excel(buffer, index=False, engine="openpyxl")
-        buffer.seek(0)
-
+        excel_bytes = exportar_excel(tabla_hist)
         st.download_button(
-            "⬇️ Descargar Excel",
-            buffer,
+            "⬇️ Descargar Excel (.xlsx)",
+            excel_bytes,
             file_name="historico_precipitaciones.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
 
-    st.caption(
-        "Las celdas vacías indican ausencia de registro. "
-        "Solo se incluyen valores válidos de precipitación (≥ 1 mm)."
-    )
 
+# ==============================================================
+# 5. GENERADOR DE REPORTES (PDF)
+# ==============================================================
+elif seccion == "📑 Reportes (PDF)":
 
+    st.subheader("📑 Reporte Mensual Formal por Provincia / Departamento")
 
-
-# ------------------------- REPORTES -------------------------
-elif seccion == "📑 Reportes":
-
-    st.subheader("📑 Reporte mensual por Provincia / Departamento")
-
-    # ============================
-    # SELECCIÓN TERRITORIAL
-    # ============================
     provincia = st.selectbox(
         "Provincia:",
         sorted(df["Provincia"].dropna().unique())
@@ -1499,76 +1488,47 @@ elif seccion == "📑 Reportes":
     deptos_prov = sorted(
         df[df["Provincia"] == provincia]["Departamento"].dropna().unique()
     )
-
-    # Agregamos opción explícita "Todos"
     opciones_deptos = ["Todos los departamentos"] + deptos_prov
 
     departamentos_sel = st.multiselect(
         "Departamento(s):",
         opciones_deptos,
         default=["Todos los departamentos"],
-        help=(
-            "Puede seleccionar uno, varios o todos los departamentos "
-            "de la provincia."
-        )
+        help="Puede seleccionar uno, varios o todos los departamentos de la provincia."
     )
 
-    # ============================
-    # PERÍODO
-    # ============================
     col1, col2 = st.columns(2)
     with col1:
         f_desde = st.date_input("Desde:", df["fecha"].min())
     with col2:
         f_hasta = st.date_input("Hasta:", df["fecha"].max())
 
-    # ============================
-    # AVISO HISTÓRICO
-    # ============================
-    st.info(
-        "ℹ️ Para generar reportes que abarquen períodos mayores a 60 días, "
-        "es necesario activar previamente la opción "
-        "**«Cargar historial completo»** desde el panel lateral."
-    )
-
-    # ============================
-    # GENERAR REPORTE
-    # ============================
-    if st.button("📄 Generar reporte"):
-
-        # --- normalización mensual ---
-        fecha_ini = pd.to_datetime(f_desde).replace(day=1)
-        fecha_fin = (
-            pd.to_datetime(f_hasta)
-            .replace(day=1)
-            + pd.offsets.MonthEnd(1)
+    if not st.session_state.cargar_todo:
+        st.info(
+            "ℹ️ Para generar reportes que abarquen períodos mayores a 60 días, "
+            "es necesario activar previamente **«Cargar historial completo»** desde el panel lateral."
         )
 
-        # --- filtro base por provincia y período ---
+    if st.button("📄 Generar reporte PDF", use_container_width=True):
+        fecha_ini = pd.to_datetime(f_desde).replace(day=1)
+        fecha_fin = pd.to_datetime(f_hasta).replace(day=1) + pd.offsets.MonthEnd(1)
+
         df_r = df[
             (df["Provincia"] == provincia) &
             (df["fecha_dt"] >= fecha_ini) &
             (df["fecha_dt"] <= fecha_fin)
         ].copy()
 
-        # --- lógica de departamentos ---
         if "Todos los departamentos" in departamentos_sel:
-            departamentos_usados = deptos_prov
             titulo_deptos = "Todos los departamentos"
         else:
-            departamentos_usados = departamentos_sel
             titulo_deptos = ", ".join(departamentos_sel)
-
-            df_r = df_r[df_r["Departamento"].isin(departamentos_usados)]
+            df_r = df_r[df_r["Departamento"].isin(departamentos_sel)]
 
         if df_r.empty:
             st.warning("No hay datos para el período y territorio seleccionados.")
         else:
-            # Texto ASCII (sin caracteres Unicode)
-            descripcion_reporte = (
-                f"Provincia: {provincia} - Departamentos: {titulo_deptos}"
-            )
-
+            descripcion_reporte = f"Provincia: {provincia} - Departamentos: {titulo_deptos}"
             pdf_m = crear_pdf_mensual_region(
                 df_r,
                 region=descripcion_reporte,
@@ -1577,7 +1537,7 @@ elif seccion == "📑 Reportes":
             )
 
             st.download_button(
-                "📄 Descargar PDF mensual",
+                "📥 Descargar PDF Mensual Generado",
                 pdf_m,
                 file_name="reporte_mensual_provincia_departamentos.pdf",
                 mime="application/pdf",
@@ -1585,39 +1545,26 @@ elif seccion == "📑 Reportes":
             )
 
 
+# ==============================================================
+# 6. RED COMPLETA DE PLUVIÓMETROS
+# ==============================================================
+elif seccion == "🌧️ Red de Pluviómetros":
 
-# ------------------------- RED COMPLETA -------------------------
-# ------------------------- RED COMPLETA -------------------------
-elif seccion == "🌧️ Red":
-    st.subheader("🌧️ Red completa de pluviómetros")
-    st.info("Este mapa muestra todos los pluviómetros incorporados a la red.")
+    st.subheader("🌧️ Directorio y Mapa de la Red Pluviométrica")
+    st.info("Ubicación geográfica de todos los pluviómetros registrados en el sistema del INTA.")
 
-    # ============================
-    # BASE DE ESTACIONES (lat/lon)
-    # ============================
     df_red = df_estaciones.dropna(subset=["lat", "lon"]).copy()
 
-    # Nombre visible de estación
     if col_nombre_est and col_nombre_est in df_red.columns:
         df_red["Pluviómetro"] = df_red[col_nombre_est].fillna(df_red["cod"])
     else:
         df_red["Pluviómetro"] = df_red.get("cod", "S/D")
 
-    # Detección tolerante de columnas Depto/Prov (por si varían los nombres)
-    col_depto_base = next(
-        (c for c in df_red.columns if "depto" in c.lower() or "depart" in c.lower()),
-        None
-    )
-    col_prov_base = next(
-        (c for c in df_red.columns if "prov" in c.lower()),
-        None
-    )
+    col_depto_base = next((c for c in df_red.columns if "depto" in c.lower() or "depart" in c.lower()), None)
+    col_prov_base = next((c for c in df_red.columns if "prov" in c.lower()), None)
 
-    # ============================
-    # BUSCADOR SIMPLE (opcional)
-    # ============================
     opciones = ["Ver todos"] + sorted(df_red["Pluviómetro"].dropna().unique().tolist())
-    seleccion = st.selectbox("🔍 Buscar un pluviómetro:", opciones, index=0)
+    seleccion = st.selectbox("🔍 Buscar un pluviómetro específico:", opciones, index=0)
 
     if seleccion == "Ver todos":
         df_mostrar = df_red
@@ -1628,82 +1575,67 @@ elif seccion == "🌧️ Red":
 
     if df_mostrar.empty:
         st.warning("No hay estaciones con coordenadas para mostrar.")
-        st.stop()
+    else:
+        centro = [df_mostrar["lat"].mean(), df_mostrar["lon"].mean()]
+        m_red = folium.Map(location=centro, zoom_start=zoom_init, tiles=None)
 
-    # ============================
-    # MAPA FOLIUM (sin parpadeo)
-    # ============================
-    centro = [df_mostrar["lat"].mean(), df_mostrar["lon"].mean()]
-    m_red = folium.Map(location=centro, zoom_start=zoom_init, tiles=None)
+        folium.TileLayer(
+            tiles="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+            attr="Google",
+            name="Google Satélite",
+            overlay=False
+        ).add_to(m_red)
 
-    # Capas base
-    folium.TileLayer(
-        tiles="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
-        attr="Google",
-        name="Google Satélite",
-        overlay=False
-    ).add_to(m_red)
+        folium.TileLayer(
+            tiles="https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png",
+            attr="IGN",
+            name="Argenmap (IGN)",
+            overlay=False
+        ).add_to(m_red)
 
-    folium.TileLayer(
-        tiles="https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png",
-        attr="IGN",
-        name="Argenmap (IGN)",
-        overlay=False
-    ).add_to(m_red)
+        pluvios = folium.FeatureGroup(name="Pluviómetros", overlay=False, control=False)
+        cluster = MarkerCluster().add_to(pluvios)
+        m_red.add_child(pluvios)
 
-    # Cluster de marcadores (mejor performance)
-    
-    #cluster = MarkerCluster().add_to(m_red)
-    pluvios = folium.FeatureGroup(
-        name="Pluviómetros",
-        overlay=False,   # 👈 CLAVE: no aparece en el control
-        control=False
-    )
+        for _, r in df_mostrar.iterrows():
+            depto_val = r[col_depto_base] if col_depto_base and pd.notna(r.get(col_depto_base)) else "S/D"
+            prov_val = r[col_prov_base] if col_prov_base and pd.notna(r.get(col_prov_base)) else "S/D"
 
-    cluster = MarkerCluster().add_to(pluvios)
-    m_red.add_child(pluvios)
-
-    # ============================
-    # POPUPS (Pluviómetro / Depto / Prov.)
-    # ============================
-    for _, r in df_mostrar.iterrows():
-        depto_val = r[col_depto_base] if col_depto_base and pd.notna(r.get(col_depto_base)) else "S/D"
-        prov_val  = r[col_prov_base]  if col_prov_base  and pd.notna(r.get(col_prov_base))  else "S/D"
-
-        popup_html = f"""
-        <div style="font-family: sans-serif; min-width: 180px;">
-            <div style="font-weight:700; margin-bottom:6px;">{r['Pluviómetro']}</div>
-            <div style="font-size:13px; color:#333;">
-                <b>Depto/Prov:</b> {depto_val} / {prov_val}
+            popup_html = f"""
+            <div style="font-family: sans-serif; min-width: 180px;">
+                <div style="font-weight:700; margin-bottom:6px; color:#1E3A8A; font-size:14px;">{r['Pluviómetro']}</div>
+                <div style="font-size:13px; color:#333;">
+                    <b>Depto:</b> {depto_val}<br>
+                    <b>Provincia:</b> {prov_val}
+                </div>
             </div>
-        </div>
-        """
+            """
 
-        folium.CircleMarker(
-            location=[r["lat"], r["lon"]],
-            radius=8,
-            color="#1E3A8A",
-            fill=True,
-            fill_color="#3B82F6",
-            fill_opacity=0.9,
-            tooltip=r["Pluviómetro"],
-            popup=folium.Popup(popup_html, max_width=260)
-        ).add_to(cluster)
+            folium.CircleMarker(
+                location=[r["lat"], r["lon"]],
+                radius=8,
+                color="#1E3A8A",
+                fill=True,
+                fill_color="#3B82F6",
+                fill_opacity=0.9,
+                tooltip=str(r["Pluviómetro"]),
+                popup=folium.Popup(popup_html, max_width=260)
+            ).add_to(cluster)
 
-    # Controles
-    LocateControl(auto_start=False, flyTo=True).add_to(m_red)
-    folium.LayerControl(position="bottomright").add_to(m_red)
+        LocateControl(auto_start=False, flyTo=True).add_to(m_red)
+        folium.LayerControl(position="bottomright").add_to(m_red)
 
-    # Marco/estilo (opcional)
-    st.markdown(
-        '<div style="box-shadow:0 0 0 2px #000;border-radius:8px;margin:10px 2px;line-height:0;">',
-        unsafe_allow_html=True
-    )
-    st_folium(m_red, width="100%", height=600, key="mapa_red", returned_objects=[])
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-# ------------------------- INFO -------------------------
-elif seccion == "ℹ️ Info":
-    st.subheader("ℹ️ Información institucional")
+        st.markdown(
+            '<div style="box-shadow:0 0 0 2px #000;border-radius:8px;margin:10px 2px;line-height:0;">',
+            unsafe_allow_html=True
+        )
+        st_folium(m_red, width="100%", height=600, key="mapa_red", returned_objects=[])
+        st.markdown('</div>', unsafe_allow_html=True)
 
+
+# ==============================================================
+# 7. INFORMACIÓN INSTITUCIONAL
+# ==============================================================
+elif seccion == "ℹ️ Información":
+    st.subheader("ℹ️ Información Institucional y Créditos")
     st.markdown(INFO_MD, unsafe_allow_html=True)
