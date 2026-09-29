@@ -367,10 +367,24 @@ def cargar_estaciones():
     return df_est, col_n
 
 
+ 
+import json
+from datetime import datetime, timedelta
+
 @st.cache_data(ttl=1800, show_spinner="Descargando registros de precipitaciones...")
 def cargar_precipitaciones(solo_reciente=True):
+    url = URL_PRECIPITACIONES
+    
+    # Si está en modo rápido, solicitamos a Kobo solo los últimos 60 días
+    if solo_reciente:
+        fecha_corte = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
+        # Filtro JSON para la API de Kobo (KPI v2)
+        query_param = json.dumps({"Fecha_del_dato": {"$gte": fecha_corte}})
+        url = f"{URL_PRECIPITACIONES}&query={query_param}"
+
     try:
-        r1 = requests.get(URL_PRECIPITACIONES, headers=HEADERS, timeout=60)
+        # Aumentamos el timeout a 120 segundos por si la red del INTA está lenta
+        r1 = requests.get(url, headers=HEADERS, timeout=120)
         r1.raise_for_status()
         raw_items = r1.json()
     except Exception as e:
@@ -392,10 +406,6 @@ def cargar_precipitaciones(solo_reciente=True):
     df_p = pd.DataFrame(filas)
     df_p["fecha_dt"] = pd.to_datetime(df_p["Fecha_del_dato"], errors="coerce")
     df_p = df_p.dropna(subset=["fecha_dt"])
-
-    if solo_reciente:
-        corte = pd.Timestamp.now() - pd.Timedelta(days=60)
-        df_p = df_p[df_p["fecha_dt"] >= corte]
 
     df_p["fecha"] = df_p["fecha_dt"].dt.date
     df_p["mm"] = pd.to_numeric(df_p["Mil_metros_registrados"], errors="coerce").fillna(0.0)
